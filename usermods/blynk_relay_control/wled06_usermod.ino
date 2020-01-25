@@ -77,13 +77,16 @@ void userLoop()
 //Update Blynk with state of userVars at BLYNK_RELAY_UPDATE_INTERVAL
 void updateRelayBlynk()
 {
+  #ifndef WLED_DISABLE_BLYNK
   if (!WLED_CONNECTED) return;
   if (relayBlynkUpdateTime > millis()) return;
   Blynk.virtualWrite(BLYNK_USER_VAR0_PIN, userVar0);
   Blynk.virtualWrite(BLYNK_USER_VAR1_PIN, userVar1);
   relayBlynkUpdateTime = millis() + BLYNK_RELAY_UPDATE_INTERVAL;
+  #endif
 }
 
+#ifndef WLED_DISABLE_BLYNK
 //Add Blynk callback for setting userVar0
 BLYNK_WRITE(BLYNK_USER_VAR0_PIN)
 {
@@ -94,3 +97,4 @@ BLYNK_WRITE(BLYNK_USER_VAR1_PIN)
 {
   userVar1 = param.asInt();
 }
+#endif
