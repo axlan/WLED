@@ -53,6 +53,8 @@ void WLED::loop()
   userLoop();
   usermods.loop();
 
+  handleImu();
+
   yield();
   handleIO();
   handleIR();
@@ -198,6 +200,8 @@ void WLED::setup()
   }
 
   strip.service();
+  
+  initImu();
 
 #ifndef WLED_DISABLE_OTA
   if (aOtaEnabled) {

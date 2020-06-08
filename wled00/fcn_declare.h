@@ -19,6 +19,10 @@ void initBlynk(const char* auth);
 void handleBlynk();
 void updateBlynk();
 
+//imu.cpp
+void initImu();
+void handleImu();
+
 //button.cpp
 void shortPressAction();
 void handleButton();

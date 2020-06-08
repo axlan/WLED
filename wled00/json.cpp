@@ -294,7 +294,12 @@ void serializeInfo(JsonObject root)
   root["ver"] = versionString;
   root["vid"] = VERSION;
   //root["cn"] = WLED_CODENAME;
-  
+
+  JsonObject imu = root.createNestedObject("imu");
+  imu["yaw"] = imuYaw;
+  imu["pitch"] = imuPitch;
+  imu["roll"] = imuRoll;
+
   JsonObject leds = root.createNestedObject("leds");
   leds["count"] = ledCount;
   leds["rgbw"] = useRGBW;
