@@ -195,5 +195,10 @@ void handleImu()
     imuYaw = ypr[0];
     imuPitch = ypr[1];
     imuRoll = ypr[2];
+
+    imuGravX = gravity.x;
+    imuGravY = gravity.y;
+    imuGravZ = gravity.z;
+
   }
 }

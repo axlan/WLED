@@ -299,6 +299,9 @@ void serializeInfo(JsonObject root)
   imu["yaw"] = imuYaw;
   imu["pitch"] = imuPitch;
   imu["roll"] = imuRoll;
+  imu["gravx"] = imuGravX;
+  imu["gravy"] = imuGravY;
+  imu["gravz"] = imuGravZ;
 
   JsonObject leds = root.createNestedObject("leds");
   leds["count"] = ledCount;

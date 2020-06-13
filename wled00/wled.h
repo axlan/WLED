@@ -298,9 +298,12 @@ WLED_GLOBAL bool aOtaEnabled _INIT(true);   // ArduinoOTA allows easy updates di
 
 WLED_GLOBAL uint16_t userVar0 _INIT(0), userVar1 _INIT(0); //available for use in usermod
 
-WLED_GLOBAL float imuYaw   _INIT(0.0);
-WLED_GLOBAL float imuPitch _INIT(0.0);
-WLED_GLOBAL float imuRoll  _INIT(0.0);
+WLED_GLOBAL float imuYaw    _INIT(0.0);
+WLED_GLOBAL float imuPitch  _INIT(0.0);
+WLED_GLOBAL float imuRoll   _INIT(0.0);
+WLED_GLOBAL float imuGravX  _INIT(0.0);
+WLED_GLOBAL float imuGravY  _INIT(0.0);
+WLED_GLOBAL float imuGravZ  _INIT(0.0);
 
 #ifdef WLED_ENABLE_DMX
   // dmx CONFIG
