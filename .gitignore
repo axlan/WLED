@@ -9,3 +9,5 @@
 .DS_Store
 .gitignore
 .clang-format
+.mypy_cache
+.pytest_cache
