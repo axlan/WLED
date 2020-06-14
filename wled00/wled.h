@@ -304,6 +304,9 @@ WLED_GLOBAL float imuRoll   _INIT(0.0);
 WLED_GLOBAL float imuGravX  _INIT(0.0);
 WLED_GLOBAL float imuGravY  _INIT(0.0);
 WLED_GLOBAL float imuGravZ  _INIT(0.0);
+WLED_GLOBAL float imuGyroX  _INIT(0.0);
+WLED_GLOBAL float imuGyroY  _INIT(0.0);
+WLED_GLOBAL float imuGyroZ  _INIT(0.0);
 
 #ifdef WLED_ENABLE_DMX
   // dmx CONFIG

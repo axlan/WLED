@@ -302,6 +302,9 @@ void serializeInfo(JsonObject root)
   imu["gravx"] = imuGravX;
   imu["gravy"] = imuGravY;
   imu["gravz"] = imuGravZ;
+  imu["gyrox"] = imuGyroX;
+  imu["gyroy"] = imuGyroY;
+  imu["gyroz"] = imuGyroZ;
 
   JsonObject leds = root.createNestedObject("leds");
   leds["count"] = ledCount;
