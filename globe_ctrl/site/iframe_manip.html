@@ -1,0 +1,50 @@
+<html>
+<head>
+<title>jQuery Hello World</title>
+
+<script type="text/javascript" src="jquery-1.2.6.min.js"></script>
+
+</head>
+
+<body>
+
+<script type="text/javascript">
+
+$(document).ready(function(){
+ $("#msgid").html("This is Hello World by JQuery");
+
+    // $("a").click(function(e) {
+    //     e.preventDefault();
+        
+    //     $("#someFrame").attr("src", $(this).attr("href"));
+    // })
+
+    
+;
+        
+
+});
+
+function myFunction() {
+    document.getElementById('mymap').src = "https://www.google.com/maps/d/u/0/embed?mid=1dcALQQN6cRd5IfYzlf1FwijJM7xQM8LD&ll=43.00852998727199%2C-120.23088379890949&z=8";
+}
+
+
+</script>
+
+This is Hello World by HTML
+
+<div id="msgid">
+</div>
+
+<button onclick="myFunction()">Click me</button>
+
+
+<iframe id="mymap" src="https://www.google.com/maps/d/u/0/embed?mid=1dcALQQN6cRd5IfYzlf1FwijJM7xQM8LD"
+width="640" height="480">
+</iframe>
+
+</body>
+</html>
+
+
