@@ -24,13 +24,26 @@
     <div id="map"></div>
     <script>
 
+      function Marker2LatLngLiteral(marker) {
+        return LatLng2LatLngLiteral(marker.getPosition());
+      }
+      function LatLng2LatLngLiteral(point) {
+        return {"lat": point.lat(), "lng": point.lng()};
+      }
 
+      function GetBoundsDiagDistance(bounds) {
+        var mk1 = LatLng2LatLngLiteral(bounds.getNorthEast());
+        var mk2 = LatLng2LatLngLiteral(bounds.getSouthWest());
+        return haversine_distance(mk1, mk2);
+      }
+//https://gis.stackexchange.com/questions/7430/what-ratio-scales-do-google-maps-zoom-levels-correspond-to
+//metersPerPx = 156543.03392 * Math.cos(latLng.lat() * Math.PI / 180) / Math.pow(2, zoom)
       function haversine_distance(mk1, mk2) {
         var R = 3958.8; // Radius of the Earth in miles To use kilometers, set R = 6371.0710
-        var rlat1 = mk1.position.lat() * (Math.PI/180); // Convert degrees to radians
+        var rlat1 = mk1.lat * (Math.PI/180); // Convert degrees to radians
         var rlat2 = mk2.lat * (Math.PI/180); // Convert degrees to radians
         var difflat = rlat2-rlat1; // Radian difference (latitudes)
-        var difflon = (mk2.lng-mk1.position.lng()) * (Math.PI/180); // Radian difference (longitudes)
+        var difflon = (mk2.lng-mk1.lng) * (Math.PI/180); // Radian difference (longitudes)
 
         var d = 2 * R * Math.asin(Math.sqrt(Math.sin(difflat/2)*Math.sin(difflat/2)+Math.cos(rlat1)*Math.cos(rlat2)*Math.sin(difflon/2)*Math.sin(difflon/2)));
         return d;
@@ -70,9 +83,15 @@
       var cur_marker = null;
 
       function update_map(map) {
+        
 
         if (Date.now() - click_time < 5000) {
-          $.post( "/set_center", {"lat": map.getCenter().lat(), "lng": map.getCenter().lng()}, function( data ) {}, "json");
+          $.post( "/set_center", LatLng2LatLngLiteral(map.getCenter()), function( data ) {}, "json");
+          cur_window.close(map, cur_marker);
+          cur_marker = null;
+          rotate_indexes = [];
+          setTimeout(function(){update_map(map);}, 1000);
+          return;
         }
         else {
           backend_api = "/get_map_params"
@@ -85,32 +104,73 @@
                   rotate_indexes = [];
                   cur_index = 0;
                   for(var i=0;i<placeMarks.length;i++){ 
-                    if (haversine_distance(placeMarks[i].marker, data) < data['range']) {
+                    if (haversine_distance(Marker2LatLngLiteral(placeMarks[i].marker), data) < data['range']) {
                       rotate_indexes.push(i);
                     }
                   }
-                  if (rotate_indexes.length > 0) {
-                    map.setCenter(placeMarks[rotate_indexes[0]].marker.position);
-                    map.setZoom(data['zoom']);
-                  }
               }
           });
-          if (cur_window != null) {
-            cur_window.close(map, cur_marker);
-            cur_window = null;
+
+          setTimeout(function(){update_map(map);}, 5000);
+
+          if (rotate_indexes.length == 0) {
+            return
           }
-          if (rotate_indexes.length > 0) {
-            var i = rotate_indexes[cur_index];
-            cur_index += 1
-            cur_index %= rotate_indexes.length;
-            cur_window = placeMarks[i].infowindow;
-            cur_marker = placeMarks[i].marker;
-            cur_window.open(map,cur_marker);
-            
+
+          var i = rotate_indexes[cur_index];
+          cur_index += 1
+          cur_index %= rotate_indexes.length;
+          next_window = placeMarks[i].infowindow;
+          next_marker = placeMarks[i].marker;
+
+          if (cur_marker == null) {
+            next_window.open(map, next_marker);
+          } else {
+            pan_between_markers(map, cur_marker, cur_window, next_marker, next_window);
           }
-        }
-        setTimeout(function(){update_map(map);}, 2000)
+          cur_window = next_window
+          cur_marker = next_marker
       }
+    }
+
+    // https://stackoverflow.com/questions/3817812/google-maps-v3-can-i-ensure-smooth-panning-every-time
+    function pan_between_markers(map, marker1, window1, marker2, window2) {
+      var new_bounds = new google.maps.LatLngBounds(marker1.getPosition());
+      var listener;
+      new_bounds.extend(marker2.getPosition());
+      
+      var cur_bounds = map.getBounds();
+
+      var d1 = GetBoundsDiagDistance(cur_bounds);
+      var d2 = GetBoundsDiagDistance(new_bounds);
+
+      if (d2 / d1 > 10.0) {        
+        var zoom = map.getZoom() - 3.0
+        map.setZoom(zoom);
+        listener = google.maps.event.addListener(map, 'idle', function(){
+          partial_zoom(map, marker1, window1, marker2, window2);
+        });
+        return;
+      }
+      
+      listener = google.maps.event.addListener(map, 'idle', open_marker);
+      map.fitBounds(new_bounds);
+
+      function open_marker() {
+        google.maps.event.removeListener(listener);
+        window2.open(map, marker2);
+        listener = google.maps.event.addListener(map, 'idle', close_marker);
+      }
+      function close_marker() {
+        google.maps.event.removeListener(listener);
+        window1.close(map, marker1);
+      }
+      function partial_zoom(map, marker1, window1, marker2, window2) {
+        google.maps.event.removeListener(listener);
+        pan_between_markers(map, marker1, window1, marker2, window2);
+      }
+    }
+      
     </script>
     <script async defer
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAd6fiReR43OFCZWiG44QgblDoCdqDskOA&callback=initMap">

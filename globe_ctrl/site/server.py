@@ -12,7 +12,7 @@ app = Flask(__name__)
 with open('globe_ctrl/cities.json') as fd:
   city_leds = json.load(fd)
 
-selected = {'idx': 0, 'step': 0, 'face': ''}
+selected = {'idx': 0, 'step': 0, 'face': '', "locked": False}
 
 def haversine_distance(mk1, mk2):
     R = 3958.8 # Radius of the Earth in miles To use kilometers, set R = 6371.0710
@@ -27,23 +27,26 @@ def haversine_distance(mk1, mk2):
 def get_map_params():
     face, move = get_cmd()
 
-    face_steps = []
-    for i, city in enumerate(city_leds):
-        if face == city['face']:
-            face_steps += [ (i, step) for step in city['steps'] ]
-    face_steps = sorted(face_steps, key=lambda x: x[1])
-    
+    selected['locked'] = not move and selected['face'] == face
 
-    if selected['face'] != face:
-        selected['step'] = 0
-        selected['face'] = face
-    elif move:
-        selected['step'] += 1
-        selected['step'] %= len(face_steps)
-    selected['idx'] = face_steps[selected['step']][0]
-    print(face_steps)
-    print(selected)
-    highlight(selected['idx'])
+    if not selected['locked']:
+        face_steps = []
+        for i, city in enumerate(city_leds):
+            if face == city['face']:
+                face_steps += [ (i, step) for step in city['steps'] ]
+        face_steps = sorted(face_steps, key=lambda x: x[1])
+        
+
+        if selected['face'] != face:
+            selected['step'] = 0
+            selected['face'] = face
+        elif move:
+            selected['step'] += 1
+            selected['step'] %= len(face_steps)
+        selected['idx'] = face_steps[selected['step']][0]
+        print(face_steps)
+        print(selected)
+        highlight(selected['idx'])
     return Response(json.dumps(city_leds[selected['idx']]), mimetype='application/json')
 
 @app.route('/set_center', methods=['POST'])
@@ -55,6 +58,7 @@ def set_center():
         if d < closest_dist:
             closest_dist = d
             selected['idx'] = i
+    selected['locked'] = True
     highlight(selected['idx'])
     return Response(status=200)
 
