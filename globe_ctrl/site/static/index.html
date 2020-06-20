@@ -86,14 +86,16 @@
         
 
         if (Date.now() - click_time < 5000) {
+          setTimeout(function(){update_map(map);}, 1000);
           $.post( "/set_center", LatLng2LatLngLiteral(map.getCenter()), function( data ) {}, "json");
           cur_window.close(map, cur_marker);
           cur_marker = null;
           rotate_indexes = [];
-          setTimeout(function(){update_map(map);}, 1000);
           return;
         }
         else {
+          setTimeout(function(){update_map(map);}, 5000);
+
           backend_api = "/get_map_params"
           var placeMarks = goog.maps.kml.placeMarks;
           $.getJSON( backend_api, {}).done(function( data ) {
@@ -110,8 +112,6 @@
                   }
               }
           });
-
-          setTimeout(function(){update_map(map);}, 5000);
 
           if (rotate_indexes.length == 0) {
             return
