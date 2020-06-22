@@ -2,8 +2,8 @@
 GOOGLE_API_KEY = "????????"
 var GOOGLE_API_URL = "https://maps.googleapis.com/maps/api/js?key=" + GOOGLE_API_KEY + "&callback=initMap"
 
-var GLOBE_PATH = "http://192.168.1.100/json"
-//var GLOBE_PATH = "/json"
+//var GLOBE_PATH = "http://192.168.1.100/json"
+var GLOBE_PATH = "/json"
 
 //////// KML load and parsing
 // https://gist.github.com/rborn/3317635
