@@ -28,18 +28,14 @@
 #include "palettes.h"
 
 //enable custom per-LED mapping. This can allow for better effects on matrices or special displays
-//#define WLED_CUSTOM_LED_MAPPING
+#define WLED_CUSTOM_LED_MAPPING
 
 #ifdef WLED_CUSTOM_LED_MAPPING
-//this is just an example (30 LEDs). It will first set all even, then all uneven LEDs.
+//32 LED mapping of LEDs in order of appearance on globe
 const uint16_t customMappingTable[] = {
-  0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28,
-  1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29};
-
-//another example. Switches direction every 5 LEDs.
-/*const uint16_t customMappingTable[] = {
-  0, 1, 2, 3, 4, 9, 8, 7, 6, 5, 10, 11, 12, 13, 14,
-  19, 18, 17, 16, 15, 20, 21, 22, 23, 24, 29, 28, 27, 26, 25};*/
+  2, 1, 0, 19, 18, 15, 14, 16, 17, 19, 22, 21, 20, 21, 22,
+  13, 23, 10, 7, 6, 7, 8, 7, 9, 10, 11, 10, 12, 4, 5,
+  4, 3};
 
 const uint16_t customMappingSize = sizeof(customMappingTable)/sizeof(uint16_t); //30 in example
 #endif
