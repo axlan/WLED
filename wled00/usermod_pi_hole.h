@@ -6,7 +6,13 @@
 
 class PiHoleSwitch : public Usermod {
   private:
-    PiHoleCtrl *pi_ctrl;
+    std::unique_ptr<PiHoleCtrl> pi_ctrl;
+    String pi_host;
+    String pi_key;
+    unsigned long next_update_time = 0;
+    const unsigned long UPDATE_PERIOD = 10000;
+    const int GROUP1_PIN = 4;
+    const int GROUP2_PIN = 5;
 
   public:
     //Functions called by WLED
@@ -15,7 +21,8 @@ class PiHoleSwitch : public Usermod {
      * setup() is called once at boot. WiFi is not yet connected at this point.
      */
     void setup() {
-      pi_ctrl = new PiHoleCtrl("dummy1", "dummy2");
+      pinMode(GROUP1_PIN, INPUT);
+      pinMode(GROUP2_PIN, INPUT);
     }
 
     /*
@@ -31,7 +38,37 @@ class PiHoleSwitch : public Usermod {
      * loop() is called continuously. Here you can check for events, read sensors, etc.
      */
     void loop() {
-     
+      bool updated = false;
+      if (!pi_host.equals(piholeServer)) {
+        pi_host = piholeServer;
+        updated = true;
+      }
+      if (!pi_key.equals(piholeKey)) {
+        pi_key = piholeKey;
+        updated = true;
+      }
+      if (updated) {
+        pi_ctrl = std::unique_ptr<PiHoleCtrl>(new PiHoleCtrl(pi_host, pi_key));
+      }
+
+      if (WLED_CONNECTED && pi_ctrl && millis() > next_update_time) {
+        WiFiClient client;
+        if (pi_ctrl->_group_items.size() > 0) {
+          bool failed = false;
+          if (strnlen_P(piholeGroup1, 15) > 0) {
+            failed &= pi_ctrl->enable_group(client, piholeGroup1, digitalRead(GROUP1_PIN) == HIGH);
+          }
+          if (!failed && strnlen_P(piholeGroup2, 15) > 0) {
+            failed &= pi_ctrl->enable_group(client, piholeGroup2, digitalRead(GROUP2_PIN) == HIGH);
+          }
+          if (failed) {
+            pi_ctrl->_group_items.clear();
+          }
+        } else {
+          pi_ctrl->get_groups(client);
+        }
+        next_update_time = millis() + UPDATE_PERIOD;
+      }
     }
 
 
@@ -58,9 +95,8 @@ class PiHoleSwitch : public Usermod {
      */
     void readFromJsonState(JsonObject& root)
     {
-      //if (root["bri"] == 255) Serial.println(F("Don't burn down your garage!"));
+     
     }
-    
    
     /*
      * getId() allows you to optionally give your V2 usermod an unique ID (please define it in const.h!).

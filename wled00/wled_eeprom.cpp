@@ -7,7 +7,7 @@
  */
 
 //eeprom Version code, enables default settings instead of 0 init on update
-#define EEPVER 21
+#define EEPVER 22
 //0 -> old version, default
 //1 -> 0.4p 1711272 and up
 //2 -> 0.4p 1711302 and up
@@ -283,6 +283,11 @@ void saveSettingsToEEPROM()
     EEPROM.write(2535+i, DMXFixtureMap[i]);
   } // last used: 2549. maybe leave a few bytes for future expansion and go on with 2600 kthxbye.
   #endif
+
+  writeStringToEEPROM(2944, piholeServer, 32);
+  writeStringToEEPROM(2976, piholeKey, 65);
+  writeStringToEEPROM(3041, piholeGroup1, 16);
+  writeStringToEEPROM(3057, piholeGroup2, 16);
 
   commit();
 }
@@ -582,6 +587,14 @@ void loadSettingsFromEEPROM(bool first)
   } //last used: 2549
   EEPROM.write(2550, DMXStartLED);
   #endif
+
+  if (lastEEPROMversion == 22)
+  {
+    readStringFromEEPROM(2944, piholeServer, 32);
+    readStringFromEEPROM(2976, piholeKey, 65);
+    readStringFromEEPROM(3041, piholeGroup1, 16);
+    readStringFromEEPROM(3057, piholeGroup2, 16);
+  }
 
   //Usermod memory
   //2551 - 2559 reserved for Usermods, usable by default

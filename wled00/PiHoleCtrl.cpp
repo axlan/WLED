@@ -238,11 +238,3 @@ bool PiHoleCtrl::get_token(WiFiClient &client){
   }
   return false;
 }
-
-const std::vector<PiHoleCtrl::BlackListItem>& PiHoleCtrl::get_blacklist_items() {
-    return _blacklist_items;
-}
-
-const std::vector<PiHoleCtrl::GroupItem>& PiHoleCtrl::get_group_items() {
-    return _group_items;
-}

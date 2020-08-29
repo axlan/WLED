@@ -329,6 +329,11 @@ void getSettingsJS(byte subPage, char* dest)
     sappends('s',"MG",mqttGroupTopic);
     #endif
 
+    sappends('s',"PIHS",piholeServer);
+    sappends('s',"PIHK",piholeKey);
+    sappends('s',"PIH1",piholeGroup1);
+    sappends('s',"PIH2",piholeGroup2);
+
     #ifndef WLED_DISABLE_HUESYNC
     sappend('v',"H0",hueIP[0]);
     sappend('v',"H1",hueIP[1]);

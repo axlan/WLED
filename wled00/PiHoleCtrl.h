@@ -44,11 +44,9 @@ private:
   const char* GET_GROUPS = "action=get_groups&token=";
   String _token;
   String _php_session_cookie;
-  std::vector<BlackListItem> _blacklist_items;
-  std::vector<GroupItem> _group_items;
   StaticJsonDocument<1024> _json_doc;
 
 public:
-  const std::vector<BlackListItem>& get_blacklist_items();
-  const std::vector<GroupItem>& get_group_items();
+  std::vector<BlackListItem> _blacklist_items;
+  std::vector<GroupItem> _group_items;
 };
