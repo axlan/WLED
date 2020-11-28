@@ -180,6 +180,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     strlcpy(piholeKey, request->arg("PIHK").c_str(), 65);
     strlcpy(piholeGroup1, request->arg("PIH1").c_str(), 16);
     strlcpy(piholeGroup2, request->arg("PIH2").c_str(), 16);
+    piholeLed = request->arg("PILED").toInt();
 
     #ifndef WLED_DISABLE_HUESYNC
     for (int i=0;i<4;i++){

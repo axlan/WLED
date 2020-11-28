@@ -52,9 +52,11 @@ class PiHoleSwitch : public Usermod {
       }
 
       if (WLED_CONNECTED && pi_ctrl && millis() > next_update_time) {
+        next_update_time = millis() + UPDATE_PERIOD;
         WiFiClient client;
+        bool failed = true;
         if (pi_ctrl->_group_items.size() > 0) {
-          bool failed = false;
+          failed = false;
           if (strnlen_P(piholeGroup1, 15) > 0) {
             failed &= pi_ctrl->enable_group(client, piholeGroup1, digitalRead(GROUP1_PIN) == HIGH);
           }
@@ -67,8 +69,7 @@ class PiHoleSwitch : public Usermod {
         } else {
           pi_ctrl->get_groups(client);
         }
-        if (piholeLed >= 0) {
-          //setRealtimePixel(0, 255, 0, 0, 0);
+        if (!failed && piholeLed >= 0) {
           if (digitalRead(GROUP1_PIN) == HIGH) {
             strip.getSegment(piholeLed).colors[0] = RED;
           } else if (digitalRead(GROUP2_PIN) == HIGH) {
@@ -78,9 +79,7 @@ class PiHoleSwitch : public Usermod {
           }
           colorUpdated(NOTIFIER_CALL_MODE_FX_CHANGED);
         }
-        next_update_time = millis() + UPDATE_PERIOD;
       }
-      
     }
 
 
