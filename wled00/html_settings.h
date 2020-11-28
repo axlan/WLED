@@ -243,7 +243,8 @@ name="MG" maxlength="32"><br><i>Reboot required to apply changes. </i><a
 href="https://github.com/Aircoookie/WLED/wiki/MQTT" target="_blank">MQTT info
 </a><h3>PiHole</h3>Server: <input name="PIHS" maxlength="31"><br>Key: <input 
 name="PIHK" maxlength="64"><br>Group1: <input name="PIH1" maxlength="15"><br>
-Group2: <input name="PIH2" maxlength="15"><br><h3>Philips Hue</h3><i>
+Group2: <input name="PIH2" maxlength="15"><br>LED: <input name="PILED" 
+type="number" min="-1" max="127"><br><h3>Philips Hue</h3><i>
 You can find the bridge IP and the light number in the 'About' section of the hue app.
 </i><br>Poll Hue light <input name="HL" type="number" min="1" max="99"> every 
 <input name="HI" type="number" min="100" max="65000"> ms: <input 

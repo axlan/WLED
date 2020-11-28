@@ -288,6 +288,7 @@ void saveSettingsToEEPROM()
   writeStringToEEPROM(2976, piholeKey, 65);
   writeStringToEEPROM(3041, piholeGroup1, 16);
   writeStringToEEPROM(3057, piholeGroup2, 16);
+  EEPROM.write(3073, piholeLed);
 
   commit();
 }
@@ -594,6 +595,7 @@ void loadSettingsFromEEPROM(bool first)
     readStringFromEEPROM(2976, piholeKey, 65);
     readStringFromEEPROM(3041, piholeGroup1, 16);
     readStringFromEEPROM(3057, piholeGroup2, 16);
+    piholeLed = EEPROM.read(3073);
   }
 
   //Usermod memory

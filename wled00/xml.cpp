@@ -333,6 +333,7 @@ void getSettingsJS(byte subPage, char* dest)
     sappends('s',"PIHK",piholeKey);
     sappends('s',"PIH1",piholeGroup1);
     sappends('s',"PIH2",piholeGroup2);
+    sappend('i',"PILED",piholeLed);
 
     #ifndef WLED_DISABLE_HUESYNC
     sappend('v',"H0",hueIP[0]);

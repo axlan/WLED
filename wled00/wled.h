@@ -255,10 +255,11 @@ WLED_GLOBAL char mqttPass[41] _INIT("");                   // optional: password
 WLED_GLOBAL char mqttClientID[41] _INIT("");               // override the client ID
 WLED_GLOBAL uint16_t mqttPort _INIT(1883);
 
-WLED_GLOBAL char piholeServer[32] _INIT("");                 // both domains and IPs should work (no SSL)
-WLED_GLOBAL char piholeKey[65] _INIT("");                   // optional: username for MQTT auth
-WLED_GLOBAL char piholeGroup1[16] _INIT("");                   // optional: password for MQTT auth
-WLED_GLOBAL char piholeGroup2[16] _INIT("");               // override the client ID
+WLED_GLOBAL char piholeServer[32] _INIT("");               // Address for PiHole
+WLED_GLOBAL char piholeKey[65] _INIT("");                  // Key for accessing PiHole API
+WLED_GLOBAL char piholeGroup1[16] _INIT("");               // Name of group to enable when key in position 1
+WLED_GLOBAL char piholeGroup2[16] _INIT("");               // Name of group to enable when key in position 2
+WLED_GLOBAL int piholeLed _INIT(-1);                       // index of WLED LED group to use as output. Disabled if -1.
 
 WLED_GLOBAL bool huePollingEnabled _INIT(false);           // poll hue bridge for light state
 WLED_GLOBAL uint16_t huePollIntervalMs _INIT(2500);        // low values (< 1sec) may cause lag but offer quicker response

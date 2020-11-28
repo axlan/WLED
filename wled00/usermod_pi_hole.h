@@ -67,8 +67,20 @@ class PiHoleSwitch : public Usermod {
         } else {
           pi_ctrl->get_groups(client);
         }
+        if (piholeLed >= 0) {
+          //setRealtimePixel(0, 255, 0, 0, 0);
+          if (digitalRead(GROUP1_PIN) == HIGH) {
+            strip.getSegment(piholeLed).colors[0] = RED;
+          } else if (digitalRead(GROUP2_PIN) == HIGH) {
+            strip.getSegment(piholeLed).colors[0] = GREEN;
+          } else {
+            strip.getSegment(piholeLed).colors[0] = BLUE;
+          }
+          colorUpdated(NOTIFIER_CALL_MODE_FX_CHANGED);
+        }
         next_update_time = millis() + UPDATE_PERIOD;
       }
+      
     }
 
 
