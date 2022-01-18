@@ -31,9 +31,9 @@
   5. Wire up the MPU6050 as detailed above.
 */
 
-#include "I2Cdev.h"
+#include "src/dependencies/I2Cdev/I2Cdev.h"
 
-#include "MPU6050_6Axis_MotionApps20.h"
+#include "src/dependencies/MPU6050/MPU6050_6Axis_MotionApps20.h"
 //#include "MPU6050.h" // not necessary if using MotionApps include file
 
 // Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
@@ -206,7 +206,7 @@ class MPU6050Driver : public Usermod {
       JsonObject user = root["u"];
       if (user.isNull()) user = root.createNestedObject("u");
 
-      JsonArray imu_meas = user.createNestedObject("IMU");
+      JsonObject imu_meas = user.createNestedObject("IMU");
       JsonArray quat_json = imu_meas.createNestedArray("Quat");
       quat_json.add(qat.w);
       quat_json.add(qat.x);

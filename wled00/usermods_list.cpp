@@ -108,6 +108,8 @@
 #include "../usermods/quinled-an-penta/quinled-an-penta.h"
 #endif
 
+#include "../usermods/mpu6050_imu/usermod_mpu6050_imu.h"
+
 void registerUsermods()
 {
 /*
@@ -203,4 +205,6 @@ void registerUsermods()
   #ifdef QUINLED_AN_PENTA
   usermods.add(new QuinLEDAnPentaUsermod());
   #endif
+
+  usermods.add(new MPU6050Driver());
 }
