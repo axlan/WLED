@@ -11,6 +11,10 @@
  */
 //#include "../usermods/EXAMPLE_v2/usermod_v2_example.h"
 
+#ifdef T_QT_DISPLAY
+  #include "../usermods/usermod_v2_t_qt_display/usermod_v2_t_qt_display.h"
+#endif
+
 #ifdef USERMOD_BATTERY
   #include "../usermods/Battery/usermod_v2_Battery.h"
 #endif
@@ -212,6 +216,10 @@ void registerUsermods()
    * \/ \/ \/
    */
   //usermods.add(new MyExampleUsermod());
+  #ifdef T_QT_DISPLAY
+  usermods.add(new TQTDisplay());
+  #endif
+  
   #ifdef USERMOD_BATTERY
   usermods.add(new UsermodBattery());
   #endif
