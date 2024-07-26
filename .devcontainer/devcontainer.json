@@ -12,6 +12,12 @@
 		}
 	},
 
+	// To give the container access to a device serial port, you can uncomment one of the following lines.
+	// NOTE: The docker user needs to be able to access this port, and this will only work if the device is plugged in from the start without reconnecting.
+	// Alternatively "--privileged" can be used for more comprehensive access to the host system.
+	// "runArgs": ["--device=/dev/ttyACM0", "--group-add", "dialout"],
+	"runArgs": ["--privileged", "-v", "/dev/bus/usb:/dev/bus/usb", "--group-add", "dialout"],
+
 	// Set *default* container specific settings.json values on container create.
 	"settings": { 
 		"terminal.integrated.shell.linux": "/bin/bash",

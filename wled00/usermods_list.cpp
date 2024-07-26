@@ -106,6 +106,10 @@
   #include "../usermods/TFT_display/TFT_display.h"
 #endif
 
+#ifdef USERMOD_ID_PIXELS_DICE_TRAY
+  #include "../usermods/pixels_dice_tray/pixels_dice_tray.h"
+#endif
+
 #ifdef USERMOD_SEVEN_SEGMENT
   #include "../usermods/seven_segment_display/usermod_v2_seven_segment_display.h"
 #endif
@@ -329,6 +333,10 @@ void registerUsermods()
 
   #ifdef USERMOD_TFT_DISPLAY
   usermods.add(new TFTDisplayUsermod());
+  #endif
+
+  #ifdef USERMOD_ID_PIXELS_DICE_TRAY
+    usermods.add(new PixelsDiceTrayUsermod());
   #endif
 
   #ifdef USERMOD_SEVEN_SEGMENT
