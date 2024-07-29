@@ -43,7 +43,7 @@
 
 // How often we are redrawing screen
 #ifndef USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS
-  #define USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS 1000
+  #define USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS 200
 #endif
 
 // Time with no updates before screen turns off (-1 to disable)
@@ -65,6 +65,90 @@ pixels::BatteryUpdates battery_updates;
 
 TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
 
+static uint16_t my_blink() {
+  uint32_t color1 = SEGCOLOR(0);
+  uint32_t color2 = SEGCOLOR(1);
+  uint32_t cycleTime = (255 - SEGMENT.speed)*20;
+  uint32_t onTime = FRAMETIME;
+  onTime += ((cycleTime * SEGMENT.intensity) >> 8);
+  cycleTime += FRAMETIME*2;
+  uint32_t it = strip.now / cycleTime;
+  uint32_t rem = strip.now % cycleTime;
+
+  bool on = false;
+  if (it != SEGENV.step //new iteration, force on state for one frame, even if set time is too brief
+      || rem <= onTime) {
+    on = true;
+  }
+
+  SEGENV.step = it; //save previous iteration
+
+  uint32_t color = on ? color1 : color2;
+  SEGMENT.fill(color);
+
+  return FRAMETIME;
+}
+//<Effect parameters>;<Colors>;<Palette>;<Flags>;<Defaults>
+// https://kno.wled.ge/interfaces/json-api/#effect-metadata
+// speed/intesity, 2 colors, no palette, flags
+static const char _data_FX_MODE_MYBLINK[] PROGMEM = "MyBLINK@!,!;!,!;;01";
+
+
+
+// Need to check if this needs some synchronization.
+static pixels::RollUpdates dice_effect_state;
+
+extern uint16_t mode_breath();
+extern uint16_t mode_aurora();
+
+static uint16_t basic_roll() {
+  if (!dice_effect_state.empty()) {
+    // Only keep last state.
+    if (dice_effect_state.size() > 1) {
+      dice_effect_state.erase(dice_effect_state.begin(), dice_effect_state.begin() + dice_effect_state.size() - 1);
+    }
+
+    auto roll = dice_effect_state.end()->second;
+
+    if (roll.state != pixels::RollState::ON_FACE) {
+      return mode_breath();
+    }
+    else {
+      uint16_t ret = mode_aurora();
+      uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
+      for (int i = num_segments; i < SEGLEN; i++) {
+        SEGMENT.setPixelColor(i, SEGCOLOR(1));
+      }
+      return ret;
+    }
+  }
+  return FRAMETIME;
+
+  // uint32_t color1 = SEGCOLOR(0);
+  // uint32_t color2 = SEGCOLOR(1);
+  // uint32_t cycleTime = (255 - SEGMENT.speed)*20;
+  // uint32_t onTime = FRAMETIME;
+  // onTime += ((cycleTime * SEGMENT.intensity) >> 8);
+  // cycleTime += FRAMETIME*2;
+  // uint32_t it = strip.now / cycleTime;
+  // uint32_t rem = strip.now % cycleTime;
+
+  // bool on = false;
+  // if (it != SEGENV.step //new iteration, force on state for one frame, even if set time is too brief
+  //     || rem <= onTime) {
+  //   on = true;
+  // }
+
+  // SEGENV.step = it; //save previous iteration
+
+  // uint32_t color = on ? color1 : color2;
+  // SEGMENT.fill(color);
+
+  // return FRAMETIME;
+}
+static const char _data_FX_MODE_DIEROLL[] PROGMEM = "DieRoll@!;!,!;!;01";
+
+
 
 class RollCountWidget
 {
@@ -78,6 +162,7 @@ class RollCountWidget
     const uint16_t max_bar_height = 60;
     unsigned roll_counts[20] = {0};
     unsigned total = 0;
+    unsigned max_count = 0;
     
   public:
 
@@ -92,23 +177,27 @@ class RollCountWidget
       }
       roll_counts[val]++;
       total++;
+      max_count = max(roll_counts[val], max_count);
     }
 
     void Draw() {
       // Add 2 pixels to lengths for boarder width.
-      tft.drawRect(xs, ys, bar_width * 20 + 2, max_bar_height + 2, border_color);
-      for(size_t i = 0; i < 20; i++) {
+      tft.drawRect(xs, ys, bar_width * 20 + 2, max_bar_height + 2,
+                   border_color);
+      for (size_t i = 0; i < 20; i++) {
         if (roll_counts[i] > 0) {
-          uint16_t bar_height = round(float(roll_counts[i]) / float(total) * float(max_bar_height));
-          // the y start is the top of the bar.
-          tft.fillRect(xs + 1 + bar_width * i, ys + 1 + max_bar_height - bar_height, bar_width, bar_height, bar_color);
+          // Scale bar by highest count.
+          uint16_t bar_height = round(float(roll_counts[i]) / float(max_count) *
+                                      float(max_bar_height));
+          // Add space between bars
+          uint16_t padding = (bar_width > 1) ? 1 : 0;
+          // Need to start from top of bar and draw down
+          tft.fillRect(xs + 1 + bar_width * i,
+                       ys + 1 + max_bar_height - bar_height,
+                       bar_width - padding, bar_height, bar_color);
         }
       }
     }
-
-
-  private:
-
 };
 
 
@@ -199,14 +288,17 @@ class PixelsDiceTrayUsermod : public Usermod {
     // "E (1513) wifi:Error! Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled!!!!!!"
     noWifiSleep = false;
 
+    strip.addEffect(255, &my_blink, _data_FX_MODE_MYBLINK);
+    strip.addEffect(255, &basic_roll, _data_FX_MODE_DIEROLL);
+
     tft.init();
     tft.setRotation(rotation);
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_RED);
-    tft.setCursor(60, 100);
+    tft.setCursor(0, 60);
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(2 * font_size);
-    tft.print("Loading...");
+    tft.print(" No Dice");
 
     // Start a background task scanning for dice.
     // On completion the discovered dice are connected to.
@@ -257,6 +349,8 @@ class PixelsDiceTrayUsermod : public Usermod {
         rolled = true;
       }
     }
+    // Add updates to the effect queue.
+    dice_effect_state.insert(dice_effect_state.end(), roll_updates.begin(), roll_updates.end());
 
     if (rolled) {
       tft.fillScreen(TFT_BLACK);
