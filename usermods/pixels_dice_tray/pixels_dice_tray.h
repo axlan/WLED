@@ -1,10 +1,8 @@
-// Credits to @mrVanboy, @gwaland and my dearest friend @westward
-// Also for @spiff72 for usermod TTGO-T-Display
 #pragma once
 
-#include "wled.h"
 #include <TFT_eSPI.h>
-#include <pixels_dice_interface.h> // https://github.com/axlan/arduino-pixels-dice
+#include <pixels_dice_interface.h>  // https://github.com/axlan/arduino-pixels-dice
+#include "wled.h"
 
 #ifndef USER_SETUP_LOADED
   #ifndef TFT_WIDTH
@@ -48,45 +46,36 @@
 
 // Time with no updates before screen turns off (-1 to disable)
 #ifndef USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS
-  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 5*60*1000
+  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 5 * 60 * 1000
 #endif
 
-#define WLED_DEBOUNCE_THRESHOLD      50 // only consider button input of at least 50ms as valid (debouncing)
-#define WLED_LONG_PRESS             600 // long press if button is released after held for at least 600ms
-#define WLED_DOUBLE_PRESS           350 // double press if another press within 350ms after a short press
+#define WLED_DEBOUNCE_THRESHOLD \
+  50  // only consider button input of at least 50ms as valid (debouncing)
+#define WLED_LONG_PRESS \
+  600  // long press if button is released after held for at least 600ms
+#define WLED_DOUBLE_PRESS \
+  350  // double press if another press within 350ms after a short press
 
 extern int getSignalQuality(int rssi);
 
 static constexpr size_t BLE_SCAN_DURATION_SEC = 4;
 static constexpr size_t BLE_TIME_BETWEEN_SCANS_SEC = 5;
 
-const uint8_t LIGHTNING_ICON_8X8[]  PROGMEM = {
-  0b00001111,
-  0b00010010,
-  0b00100100,
-  0b01001111,
-  0b10000001,
-  0b11110010,
-  0b00010100,
-  0b00011000,
+const uint8_t LIGHTNING_ICON_8X8[] PROGMEM = {
+    0b00001111, 0b00010010, 0b00100100, 0b01001111,
+    0b10000001, 0b11110010, 0b00010100, 0b00011000,
 };
 
-const uint8_t BATTERY_ICON_8X8[]  PROGMEM = {
-  0b00000000,
-  0b00000000,
-  0b11111110,
-  0b10101011,
-  0b10101011,
-  0b11111110,
-  0b00000000,
-  0b00000000,
+const uint8_t BATTERY_ICON_8X8[] PROGMEM = {
+    0b00000000, 0b00000000, 0b11111110, 0b10101011,
+    0b10101011, 0b11111110, 0b00000000, 0b00000000,
 };
 
 static constexpr size_t NUM_DICE = 2;
 // NOTE: The ordering is taken into account when referencing die 1 vs die 2.
 static std::array<std::string, NUM_DICE> configured_die_names = {
-  "Aurora",
-  "Midnight",
+    "Aurora",
+    "Midnight",
 };
 // The ordering here matches configured_die_names.
 static std::array<pixels::PixelsDieID, NUM_DICE> connected_die_ids = {0, 0};
@@ -102,26 +91,29 @@ TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
 
 template <typename C, typename T>
 static bool Contains(const C& container, T value) {
-  return std::find(container.begin(), container.end(), value) != container.end();
-} 
+  return std::find(container.begin(), container.end(), value) !=
+         container.end();
+}
 
 static uint16_t my_blink() {
   uint32_t color1 = SEGCOLOR(0);
   uint32_t color2 = SEGCOLOR(1);
-  uint32_t cycleTime = (255 - SEGMENT.speed)*20;
+  uint32_t cycleTime = (255 - SEGMENT.speed) * 20;
   uint32_t onTime = FRAMETIME;
   onTime += ((cycleTime * SEGMENT.intensity) >> 8);
-  cycleTime += FRAMETIME*2;
+  cycleTime += FRAMETIME * 2;
   uint32_t it = strip.now / cycleTime;
   uint32_t rem = strip.now % cycleTime;
 
   bool on = false;
-  if (it != SEGENV.step //new iteration, force on state for one frame, even if set time is too brief
+  if (it !=
+          SEGENV
+              .step  //new iteration, force on state for one frame, even if set time is too brief
       || rem <= onTime) {
     on = true;
   }
 
-  SEGENV.step = it; //save previous iteration
+  SEGENV.step = it;  //save previous iteration
 
   uint32_t color = on ? color1 : color2;
   SEGMENT.fill(color);
@@ -156,8 +148,7 @@ static uint16_t basic_roll() {
 
     if (roll.state != pixels::RollState::ON_FACE) {
       return mode_breath();
-    }
-    else {
+    } else {
       uint16_t ret = mode_aurora();
       uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
       for (int i = num_segments; i < SEGLEN; i++) {
@@ -192,80 +183,68 @@ static uint16_t basic_roll() {
 }
 static const char _data_FX_MODE_DIEROLL[] PROGMEM = "DieRoll@!;!,!;!;01";
 
+class RollCountWidget {
+ private:
+  // Could make configurable if needed.
+  int16_t xs = 0;
+  int16_t ys = 0;
+  uint16_t border_color = TFT_RED;
+  uint16_t bar_color = TFT_GREEN;
+  uint16_t bar_width = 6;
+  uint16_t max_bar_height = 60;
+  unsigned roll_counts[20] = {0};
+  unsigned total = 0;
+  unsigned max_count = 0;
 
+ public:
+  RollCountWidget(int16_t xs = 0, int16_t ys = 0,
+                  uint16_t border_color = TFT_RED,
+                  uint16_t bar_color = TFT_GREEN, uint16_t bar_width = 6,
+                  uint16_t max_bar_height = 60)
+      : xs(xs),
+        ys(ys),
+        border_color(border_color),
+        bar_color(bar_color),
+        bar_width(bar_width),
+        max_bar_height(max_bar_height) {}
 
-class RollCountWidget
-{
-  private:
-    // Could make configurable if needed.
-    int16_t xs = 0;
-    int16_t ys = 0;
-    uint16_t border_color = TFT_RED;
-    uint16_t bar_color = TFT_GREEN;
-    uint16_t bar_width = 6;
-    uint16_t max_bar_height = 60;
-    unsigned roll_counts[20] = {0};
-    unsigned total = 0;
-    unsigned max_count = 0;
-    
-  public:
-   RollCountWidget(int16_t xs = 0, int16_t ys = 0,
-                   uint16_t border_color = TFT_RED,
-                   uint16_t bar_color = TFT_GREEN,
-                   uint16_t bar_width = 6,
-                   uint16_t max_bar_height = 60)
-       : xs(xs),
-         ys(ys),
-         border_color(border_color),
-         bar_color(bar_color),
-         bar_width(bar_width),
-         max_bar_height(max_bar_height) {}
+  void Clear() {
+    memset(roll_counts, 0, sizeof(roll_counts));
+    total = 0;
+    max_count = 0;
+  }
 
-   void Clear() {
-     memset(roll_counts, 0, sizeof(roll_counts));
-     total = 0;
-     max_count = 0;
+  unsigned GetNumRolls() const { return total; }
+
+  void AddRoll(unsigned val) {
+    if (val > 19) {
+      return;
     }
+    roll_counts[val]++;
+    total++;
+    max_count = max(roll_counts[val], max_count);
+  }
 
-    unsigned GetNumRolls() const {
-      return total;
-    }
-
-    void AddRoll(unsigned val){
-      if (val > 19) {
-        return;
-      }
-      roll_counts[val]++;
-      total++;
-      max_count = max(roll_counts[val], max_count);
-    }
-
-    void Draw() {
-      // Add 2 pixels to lengths for boarder width.
-      tft.drawRect(xs, ys, bar_width * 20 + 2, max_bar_height + 2,
-                   border_color);
-      for (size_t i = 0; i < 20; i++) {
-        if (roll_counts[i] > 0) {
-          // Scale bar by highest count.
-          uint16_t bar_height = round(float(roll_counts[i]) / float(max_count) *
-                                      float(max_bar_height));
-          // Add space between bars
-          uint16_t padding = (bar_width > 1) ? 1 : 0;
-          // Need to start from top of bar and draw down
-          tft.fillRect(xs + 1 + bar_width * i,
-                       ys + 1 + max_bar_height - bar_height,
-                       bar_width - padding, bar_height, bar_color);
-        }
+  void Draw() {
+    // Add 2 pixels to lengths for boarder width.
+    tft.drawRect(xs, ys, bar_width * 20 + 2, max_bar_height + 2, border_color);
+    for (size_t i = 0; i < 20; i++) {
+      if (roll_counts[i] > 0) {
+        // Scale bar by highest count.
+        uint16_t bar_height = round(float(roll_counts[i]) / float(max_count) *
+                                    float(max_bar_height));
+        // Add space between bars
+        uint16_t padding = (bar_width > 1) ? 1 : 0;
+        // Need to start from top of bar and draw down
+        tft.fillRect(xs + 1 + bar_width * i,
+                     ys + 1 + max_bar_height - bar_height, bar_width - padding,
+                     bar_height, bar_color);
       }
     }
+  }
 };
 
-
-enum class ButtonType {
-  SINGLE,
-  DOUBLE,
-  LONG
-};
+enum class ButtonType { SINGLE, DOUBLE, LONG };
 
 class MenuBase {
  public:
@@ -280,7 +259,8 @@ class DiceStatusMenu : public MenuBase {
  public:
   DiceStatusMenu()
       : die_roll_counts{RollCountWidget{0, 20, TFT_BLUE, TFT_GREEN, 6, 40},
-                        RollCountWidget{0, SECTION_HEIGHT + 20, TFT_BLUE, TFT_GREEN, 6, 40}} {}
+                        RollCountWidget{0, SECTION_HEIGHT + 20, TFT_BLUE,
+                                        TFT_GREEN, 6, 40}} {}
 
   void Update() override {
     for (size_t i = 0; i < NUM_DICE; i++) {
@@ -328,7 +308,8 @@ class DiceStatusMenu : public MenuBase {
       // Screen updates might be slow, yield in case network task needs to do
       // work.
       yield();
-      bool battery_update = connected && (millis() - last_update[i] > BATTERY_REFRESH_RATE_MS);
+      bool battery_update =
+          connected && (millis() - last_update[i] > BATTERY_REFRESH_RATE_MS);
       if (force_redraw || die_updated[i] || battery_update) {
         last_update[i] = millis();
         tft.fillRect(0, ys, TFT_WIDTH, SECTION_HEIGHT, TFT_BLACK);
@@ -389,8 +370,7 @@ class EffectMenu : public MenuBase {
  public:
   EffectMenu() = default;
 
-  void Update() override {
-  }
+  void Update() override {}
 
   void Draw(bool force_redraw) override {
     if (force_redraw) {
@@ -400,23 +380,21 @@ class EffectMenu : public MenuBase {
         char lineBuffer[CHAR_WIDTH_BIG + 1];
         extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_BIG);
         tft.setTextColor(TFT_WHITE);
-        tft.setCursor(0,0);
+        tft.setCursor(0, 0);
         tft.setTextSize(2);
         tft.println(lineBuffer);
-      }
-      else {
+      } else {
         char lineBuffer[CHAR_WIDTH_SMALL + 1];
         extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_SMALL);
         tft.setTextColor(TFT_WHITE);
-        tft.setCursor(0,0);
+        tft.setCursor(0, 0);
         tft.setTextSize(1);
         tft.println(lineBuffer);
       }
     }
   }
 
-  void HandleButton(ButtonType type, uint8_t b) override {
-  };
+  void HandleButton(ButtonType type, uint8_t b) override {};
 
  private:
   static constexpr std::array<uint8_t, 1> DIE_LED_MODES = {FX_MODE_BASIC_D20};
@@ -432,13 +410,12 @@ class MenuController {
     // Switch menus with double click
     if (ButtonType::DOUBLE == type) {
       if (b == 0) {
-        current_index = (current_index == 0) ? menu_ptrs.size() - 1 : current_index - 1;
-      }
-      else {
+        current_index =
+            (current_index == 0) ? menu_ptrs.size() - 1 : current_index - 1;
+      } else {
         current_index = (current_index + 1) % menu_ptrs.size();
       }
-    }
-    else {
+    } else {
       menu_ptrs[current_index]->HandleButton(type, b);
     }
   }
@@ -461,12 +438,10 @@ class MenuController {
 };
 MenuController menu_ctrl;
 
-
 class PixelsDiceTrayUsermod : public Usermod {
  private:
   unsigned long lastTime = 0;
   bool enabled = true;
-
 
   // Settings
   unsigned font_size = USERMOD_PIXELS_DICE_TRAY_SCALE;
@@ -475,7 +450,7 @@ class PixelsDiceTrayUsermod : public Usermod {
   // Number of chars that fit on screen with text size set to `font_size`
   static constexpr size_t TFT_CHAR_WIDTH = 19;
   // Extra char (+1) for null
-  static constexpr size_t LINE_BUFFER_SIZE = TFT_CHAR_WIDTH + 1;  
+  static constexpr size_t LINE_BUFFER_SIZE = TFT_CHAR_WIDTH + 1;
 
   long lastUpdate = 0;
 
@@ -492,14 +467,14 @@ class PixelsDiceTrayUsermod : public Usermod {
   static void center(String& line, uint8_t width) {
     int len = line.length();
     if (len < width)
-      for (byte i = (width - len) / 2; i > 0; i--) line = ' ' + line;
-    for (byte i = line.length(); i < width; i++) line += ' ';
+      for (byte i = (width - len) / 2; i > 0; i--)
+        line = ' ' + line;
+    for (byte i = line.length(); i < width; i++)
+      line += ' ';
   }
 
   // Make sure the next update redraws the screen.
-  void ForceRedraw() {
-    lastUpdate = 0;
-  }
+  void ForceRedraw() { lastUpdate = 0; }
 
   // NOTE: THIS MOD DOES NOT SUPPORT CHANGING THE SPI PINS FROM THE UI! The
   // TFT_eSPI library requires that they are compiled in.
@@ -511,7 +486,6 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
     spi_sclk = TFT_SCLK;
   }
-
 
  public:
   // Functions called by WLED
@@ -618,7 +592,8 @@ class PixelsDiceTrayUsermod : public Usermod {
       if (!matched) {
         auto description = pixels::GetDieDescription(die_id);
         for (size_t i = 0; i < NUM_DICE; i++) {
-          if (0 == connected_die_ids[i] && description.name == configured_die_names[i]) {
+          if (0 == connected_die_ids[i] &&
+              description.name == configured_die_names[i]) {
             connected_die_ids[i] = die_id;
             die_connected[i] = true;
             break;
@@ -638,13 +613,13 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     if (pixels::IsScanning() && all_found) {
       pixels::StopScanning();
-    }
-    else if(!pixels::IsScanning() && !all_found) {
+    } else if (!pixels::IsScanning() && !all_found) {
       pixels::ScanForDice(BLE_SCAN_DURATION_SEC, BLE_TIME_BETWEEN_SCANS_SEC);
     }
 
     // Add updates to the effect queue.
-    dice_effect_state.insert(dice_effect_state.end(), roll_updates.begin(), roll_updates.end());
+    dice_effect_state.insert(dice_effect_state.end(), roll_updates.begin(),
+                             roll_updates.end());
 
     menu_ctrl.Update();
   }
@@ -657,7 +632,8 @@ class PixelsDiceTrayUsermod : public Usermod {
    */
   void addToJsonInfo(JsonObject& root) override {
     JsonObject user = root["u"];
-    if (user.isNull()) user = root.createNestedObject("u");
+    if (user.isNull())
+      user = root.createNestedObject("u");
 
     JsonArray lightArr = user.createNestedArray("TFT");      // name
     lightArr.add(enabled ? F("installed") : F("disabled"));  // unit
@@ -763,58 +739,55 @@ class PixelsDiceTrayUsermod : public Usermod {
     return !top["TFT"].isNull();
   }
 
-
   /**
    * handleButton() can be used to override default button behaviour. Returning true
    * will prevent button working in a default way.
    * Replicating button.cpp
    */
   bool handleButton(uint8_t b) override {
-    if (!enabled
-      || b > 1 // buttons 0,1 only
-      || buttonType[b] == BTN_TYPE_SWITCH
-      || buttonType[b] == BTN_TYPE_NONE
-      || buttonType[b] == BTN_TYPE_RESERVED
-      || buttonType[b] == BTN_TYPE_PIR_SENSOR
-      || buttonType[b] == BTN_TYPE_ANALOG
-      || buttonType[b] == BTN_TYPE_ANALOG_INVERTED) {
+    if (!enabled || b > 1  // buttons 0,1 only
+        || buttonType[b] == BTN_TYPE_SWITCH || buttonType[b] == BTN_TYPE_NONE ||
+        buttonType[b] == BTN_TYPE_RESERVED ||
+        buttonType[b] == BTN_TYPE_PIR_SENSOR ||
+        buttonType[b] == BTN_TYPE_ANALOG ||
+        buttonType[b] == BTN_TYPE_ANALOG_INVERTED) {
       return false;
     }
 
     unsigned long now = millis();
-    static bool buttonPressedBefore[2] = { false };
-    static bool buttonLongPressed[2] = { false };
-    static unsigned long buttonPressedTime[2] = { 0 };
-    static unsigned long buttonWaitTime[2] = { 0 };
+    static bool buttonPressedBefore[2] = {false};
+    static bool buttonLongPressed[2] = {false};
+    static unsigned long buttonPressedTime[2] = {0};
+    static unsigned long buttonWaitTime[2] = {0};
 
     //momentary button logic
-    if (!buttonLongPressed[b] && isButtonPressed(b)) { //pressed
-      if (!buttonPressedBefore[b]) { buttonPressedTime[b] = now; }
+    if (!buttonLongPressed[b] && isButtonPressed(b)) {  //pressed
+      if (!buttonPressedBefore[b]) {
+        buttonPressedTime[b] = now;
+      }
       buttonPressedBefore[b] = true;
 
-      if (now - buttonPressedTime[b] > WLED_LONG_PRESS) { //long press
+      if (now - buttonPressedTime[b] > WLED_LONG_PRESS) {  //long press
         menu_ctrl.HandleButton(ButtonType::LONG, b);
         buttonLongPressed[b] = true;
         return true;
       }
-    }
-    else if (!isButtonPressed(b) && buttonPressedBefore[b]) { //released
+    } else if (!isButtonPressed(b) && buttonPressedBefore[b]) {  //released
 
       long dur = now - buttonPressedTime[b];
       if (dur < WLED_DEBOUNCE_THRESHOLD) {
         buttonPressedBefore[b] = false;
         return true;
-      } //too short "press", debounce
+      }  //too short "press", debounce
 
-      bool doublePress = buttonWaitTime[b]; //did we have short press before?
+      bool doublePress = buttonWaitTime[b];  //did we have short press before?
       buttonWaitTime[b] = 0;
 
-      if (!buttonLongPressed[b]) { //short press
+      if (!buttonLongPressed[b]) {  //short press
         // if this is second release within 350ms it is a double press (buttonWaitTime!=0)
         if (doublePress) {
           menu_ctrl.HandleButton(ButtonType::DOUBLE, b);
-        }
-        else {
+        } else {
           buttonWaitTime[b] = now;
         }
       }
@@ -822,7 +795,8 @@ class PixelsDiceTrayUsermod : public Usermod {
       buttonLongPressed[b] = false;
     }
     // if 350ms elapsed since last press/release it is a short press
-    if (buttonWaitTime[b] && now - buttonWaitTime[b] > WLED_DOUBLE_PRESS && !buttonPressedBefore[b]) {
+    if (buttonWaitTime[b] && now - buttonWaitTime[b] > WLED_DOUBLE_PRESS &&
+        !buttonPressedBefore[b]) {
       buttonWaitTime[b] = 0;
       menu_ctrl.HandleButton(ButtonType::SINGLE, b);
     }
