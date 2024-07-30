@@ -100,6 +100,11 @@ pixels::BatteryUpdates battery_updates;
 
 TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
 
+template <typename C, typename T>
+static bool Contains(const C& container, T value) {
+  return std::find(container.begin(), container.end(), value) != container.end();
+} 
+
 static uint16_t my_blink() {
   uint32_t color1 = SEGCOLOR(0);
   uint32_t color2 = SEGCOLOR(1);
@@ -380,29 +385,81 @@ class DiceStatusMenu : public MenuBase {
   std::array<RollCountWidget, NUM_DICE> die_roll_counts;
 };
 
+class EffectMenu : public MenuBase {
+ public:
+  EffectMenu() = default;
+
+  void Update() override {
+  }
+
+  void Draw(bool force_redraw) override {
+    if (force_redraw) {
+      tft.fillScreen(TFT_BLACK);
+      uint8_t mode = strip.getMainSegment().mode;
+      if (Contains(DIE_LED_MODES, mode)) {
+        char lineBuffer[CHAR_WIDTH_BIG + 1];
+        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_BIG);
+        tft.setTextColor(TFT_WHITE);
+        tft.setCursor(0,0);
+        tft.setTextSize(2);
+        tft.println(lineBuffer);
+      }
+      else {
+        char lineBuffer[CHAR_WIDTH_SMALL + 1];
+        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_SMALL);
+        tft.setTextColor(TFT_WHITE);
+        tft.setCursor(0,0);
+        tft.setTextSize(1);
+        tft.println(lineBuffer);
+      }
+    }
+  }
+
+  void HandleButton(ButtonType type, uint8_t b) override {
+  };
+
+ private:
+  static constexpr std::array<uint8_t, 1> DIE_LED_MODES = {FX_MODE_BASIC_D20};
+  static constexpr size_t CHAR_WIDTH_BIG = 10;
+  static constexpr size_t CHAR_WIDTH_SMALL = 21;
+  size_t mode_idx = 0;
+};
+
 class MenuController {
  public:
   void HandleButton(ButtonType type, uint8_t b) {
-    status_menu.HandleButton(type, b);
+    force_redraw = true;
+    // Switch menus with double click
+    if (ButtonType::DOUBLE == type) {
+      if (b == 0) {
+        current_index = (current_index == 0) ? menu_ptrs.size() - 1 : current_index - 1;
+      }
+      else {
+        current_index = (current_index + 1) % menu_ptrs.size();
+      }
+    }
+    else {
+      menu_ptrs[current_index]->HandleButton(type, b);
+    }
   }
 
   void Update() {
-    status_menu.Update();
-    status_menu.Draw(!menu_drawn);
-    menu_drawn = true;
+    for (auto menu_ptr : menu_ptrs) {
+      menu_ptr->Update();
+    }
+    menu_ptrs[current_index]->Draw(force_redraw);
+    force_redraw = false;
   }
 
  private:
   size_t current_index = 0;
-  bool menu_drawn = false;
+  bool force_redraw = true;
 
   DiceStatusMenu status_menu;
-
+  EffectMenu effect_menu;
+  const std::array<MenuBase*, 2> menu_ptrs = {&status_menu, &effect_menu};
 };
 MenuController menu_ctrl;
-
-
-
 
 
 class PixelsDiceTrayUsermod : public Usermod {
@@ -491,8 +548,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     // "E (1513) wifi:Error! Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled!!!!!!"
     noWifiSleep = false;
 
-    strip.addEffect(255, &my_blink, _data_FX_MODE_MYBLINK);
-    strip.addEffect(255, &basic_roll, _data_FX_MODE_DIEROLL);
+    strip.addEffect(FX_MODE_BASIC_D20, &basic_roll, _data_FX_MODE_DIEROLL);
 
     tft.init();
     tft.setRotation(rotation);
