@@ -282,7 +282,7 @@ class DiceStatusMenu : public MenuBase {
       const auto die_id = connected_die_ids[i];
       const auto connected = die_id != 0;
 
-      die_updated[i] = connected != die_connection_status[i];
+      die_updated[i] |= connected != die_connection_status[i];
       die_connection_status[i] = connected;
 
       if (connected) {
@@ -358,7 +358,14 @@ class DiceStatusMenu : public MenuBase {
     }
   }
 
-  void HandleButton(ButtonType type, uint8_t b) override {};
+  void HandleButton(ButtonType type, uint8_t b) override {
+    if (type == ButtonType::LONG) {
+      for (size_t i = 0; i < NUM_DICE; i++) {
+        die_roll_counts[i].Clear();
+        die_updated[i] = true;
+      }
+    }
+  };
 
  private:
   static constexpr long BATTERY_REFRESH_RATE_MS = 60 * 1000;
@@ -375,7 +382,9 @@ class DiceStatusMenu : public MenuBase {
 
 class MenuController {
  public:
-  void HandleButton(ButtonType type, uint8_t b) {}
+  void HandleButton(ButtonType type, uint8_t b) {
+    status_menu.HandleButton(type, b);
+  }
 
   void Update() {
     status_menu.Update();
@@ -455,6 +464,7 @@ class PixelsDiceTrayUsermod : public Usermod {
    * You can use it to initialize variables, sensors or similar.
    */
   void setup() override {
+    //Serial.begin(115200);
     DEBUG_PRINTLN(F("Usermod TFT Display init"));
     SetSPIPinsFromMacros();
     PinManagerPinType spiPins[] = {
@@ -722,9 +732,8 @@ class PixelsDiceTrayUsermod : public Usermod {
     static unsigned long buttonWaitTime[2] = { 0 };
 
     //momentary button logic
-    if (isButtonPressed(b)) { //pressed
-
-      if (!buttonPressedBefore) { buttonPressedTime[b] = now; }
+    if (!buttonLongPressed[b] && isButtonPressed(b)) { //pressed
+      if (!buttonPressedBefore[b]) { buttonPressedTime[b] = now; }
       buttonPressedBefore[b] = true;
 
       if (now - buttonPressedTime[b] > WLED_LONG_PRESS) { //long press
@@ -733,7 +742,7 @@ class PixelsDiceTrayUsermod : public Usermod {
         return true;
       }
     }
-    else if (!isButtonPressed(b) && buttonPressedBefore) { //released
+    else if (!isButtonPressed(b) && buttonPressedBefore[b]) { //released
 
       long dur = now - buttonPressedTime[b];
       if (dur < WLED_DEBOUNCE_THRESHOLD) {
@@ -741,10 +750,10 @@ class PixelsDiceTrayUsermod : public Usermod {
         return true;
       } //too short "press", debounce
 
-      bool doublePress = buttonWaitTime; //did we have short press before?
+      bool doublePress = buttonWaitTime[b]; //did we have short press before?
       buttonWaitTime[b] = 0;
 
-      if (!buttonLongPressed) { //short press
+      if (!buttonLongPressed[b]) { //short press
         // if this is second release within 350ms it is a double press (buttonWaitTime!=0)
         if (doublePress) {
           menu_ctrl.HandleButton(ButtonType::DOUBLE, b);
@@ -757,7 +766,7 @@ class PixelsDiceTrayUsermod : public Usermod {
       buttonLongPressed[b] = false;
     }
     // if 350ms elapsed since last press/release it is a short press
-    if (buttonWaitTime && now - buttonWaitTime[b] > WLED_DOUBLE_PRESS && !buttonPressedBefore) {
+    if (buttonWaitTime[b] && now - buttonWaitTime[b] > WLED_DOUBLE_PRESS && !buttonPressedBefore[b]) {
       buttonWaitTime[b] = 0;
       menu_ctrl.HandleButton(ButtonType::SINGLE, b);
     }
