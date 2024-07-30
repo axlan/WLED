@@ -46,7 +46,7 @@
 
 // Time with no updates before screen turns off (-1 to disable)
 #ifndef USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS
-  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 5 * 60 * 1000
+  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
 #endif
 
 #define WLED_DEBOUNCE_THRESHOLD \
@@ -440,19 +440,11 @@ MenuController menu_ctrl;
 
 class PixelsDiceTrayUsermod : public Usermod {
  private:
-  unsigned long lastTime = 0;
   bool enabled = true;
 
   // Settings
   unsigned font_size = USERMOD_PIXELS_DICE_TRAY_SCALE;
   unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
-
-  // Number of chars that fit on screen with text size set to `font_size`
-  static constexpr size_t TFT_CHAR_WIDTH = 19;
-  // Extra char (+1) for null
-  static constexpr size_t LINE_BUFFER_SIZE = TFT_CHAR_WIDTH + 1;
-
-  long lastUpdate = 0;
 
   // Set the pin to turn the backlight on or off if available.
   static void EnableBacklight(bool enable) {
@@ -472,9 +464,6 @@ class PixelsDiceTrayUsermod : public Usermod {
     for (byte i = line.length(); i < width; i++)
       line += ' ';
   }
-
-  // Make sure the next update redraws the screen.
-  void ForceRedraw() { lastUpdate = 0; }
 
   // NOTE: THIS MOD DOES NOT SUPPORT CHANGING THE SPI PINS FROM THE UI! The
   // TFT_eSPI library requires that they are compiled in.
@@ -561,13 +550,14 @@ class PixelsDiceTrayUsermod : public Usermod {
    * milliseconds. Instead, use a timer check as shown here.
    */
   void loop() override {
-    char buff[LINE_BUFFER_SIZE];
+    static long last_loop_time = 0;
+    static long last_die_connected_time = millis();
 
     // Check if we time interval for redrawing passes.
-    if (millis() - lastUpdate < USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS) {
+    if (millis() - last_loop_time < USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS) {
       return;
     }
-    lastUpdate = millis();
+    last_loop_time = millis();
 
     // Update dice_list with the connected dice
     pixels::ListDice(dice_list);
@@ -604,11 +594,28 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     // Clear connected die that weren't still present.
     bool all_found = true;
+    bool none_found = true;
     for (size_t i = 0; i < NUM_DICE; i++) {
       if (!die_connected[i]) {
         connected_die_ids[i] = 0;
         all_found = false;
+      } else {
+        none_found = false;
       }
+    }
+
+    if (none_found) {
+      if (millis() - last_die_connected_time >
+          USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS) {
+            // Turn off backlight and go to sleep.
+            // Since none of the wake up pins are wired up, expect to sleep
+            // until power cycle or reset, so don't need to handle normal
+            // wakeup.
+            EnableBacklight(false);
+            esp_deep_sleep_start();
+          }
+    } else {
+      last_die_connected_time = millis();
     }
 
     if (pixels::IsScanning() && all_found) {
@@ -731,7 +738,6 @@ class PixelsDiceTrayUsermod : public Usermod {
     if (new_rotation != rotation || font_size != new_font_size) {
       rotation = new_rotation;
       font_size = new_font_size;
-      ForceRedraw();
     }
 
     // use "return !top["newestParameter"].isNull();" when updating Usermod with
