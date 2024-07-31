@@ -612,6 +612,8 @@ class PixelsDiceTrayUsermod : public Usermod {
             // until power cycle or reset, so don't need to handle normal
             // wakeup.
             EnableBacklight(false);
+            gpio_hold_en((gpio_num_t)TFT_BL);
+            gpio_deep_sleep_hold_en();
             esp_deep_sleep_start();
           }
     } else {
