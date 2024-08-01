@@ -4,6 +4,8 @@
 #include <pixels_dice_interface.h>  // https://github.com/axlan/arduino-pixels-dice
 #include "wled.h"
 
+#include "roll_info.h"
+
 #ifndef USER_SETUP_LOADED
   #ifndef TFT_WIDTH
     #error Please define TFT_WIDTH
@@ -496,77 +498,8 @@ class EffectMenu : public MenuBase {
   }
 };
 
-static constexpr int INFO_VAR_LEVEL = 9;
-static constexpr int INFO_VAR_SPELL_ABL = 6;
-static constexpr int INFO_VAR_BAB = 6;
-
-template <std::intmax_t N>
-class to_string_t {
-  constexpr static auto buflen() noexcept {
-    unsigned int len = N > 0 ? 1 : 2;
-    for (auto n = N; n; len++, n /= 10)
-      ;
-    return len;
-  }
-
-  char buf[buflen()] = {};
-
- public:
-  constexpr to_string_t() noexcept {
-    auto ptr = buf + buflen();
-    *--ptr = '\0';
-
-    if (N != 0) {
-      for (auto n = N; n; n /= 10)
-        *--ptr = "0123456789"[(N < 0 ? -1 : 1) * (n % 10)];
-      if (N < 0)
-        *--ptr = '-';
-    } else {
-      buf[0] = '0';
-    }
-  }
-
-  constexpr operator const char*() const { return buf; }
-};
-
-template <std::intmax_t N>
-constexpr to_string_t<N> to_string;
-
-struct InfoRoll {
-  uint8_t num = 0;
-  uint8_t sides = 0;
-  int8_t bonus = 0;
-};
-
-struct InfoText {
-  uint8_t font_size = 0;
-  const char* txt = "";
-};
-
-struct InfoPage {
-  std::vector<InfoText> text;
-  std::vector<InfoRoll> rolls;
-};
-
-const std::map<size_t, InfoPage> INFO_PAGES = {
-    {1, InfoPage{{
-            InfoText{.font_size = 2, .txt = "Barbed Chains\nAtk "},
-            InfoText{.font_size = 2,
-                     .txt = to_string<INFO_VAR_SPELL_ABL + INFO_VAR_BAB>},
-            InfoText{.font_size = 2, .txt = " Rng "},
-            InfoText{.font_size = 2, .txt = to_string<25 + INFO_VAR_LEVEL * 5>},
-        }}}};
-
-// const std::map<size_t, InfoPage> INFO_PAGES = {
-//   {1, InfoPage{std::vector<Text>{
-//         Text{.font_size=2, .txt="Barbed Chains\nAtk "},
-//         Text{.font_size=2, .txt=to_string_t<INFO_VAR_SPELL_ABL + INFO_VAR_BAB>},
-//         Text{.font_size=2, .txt=" Rng "},
-//         Text{.font_size=2, .txt=to_string_t<25 + INFO_VAR_LEVEL * 5>},
-//       },
-//       {Roll{1,6}}}},
-//   //{2, InfoPage{{{}}, {}}},
-// };
+constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODES;
+constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODE_NUM_FIELDS;
 
 class InfoMenu : public MenuBase {
  public:
@@ -577,19 +510,16 @@ class InfoMenu : public MenuBase {
   void Draw(bool force_redraw) override {
     if (force_redraw) {
       tft.fillScreen(TFT_BLACK);
-      if (INFO_PAGES.count(page_idx)) {
-        const InfoPage& info_page = INFO_PAGES.at(page_idx);
+      if (page_idx != INVALID_PAGE) {
+        tft.setTextSize(1);
         tft.setTextColor(TFT_WHITE);
         tft.setCursor(0, 0);
-        for (const auto& entry : info_page.text) {
-          tft.setTextSize(entry.font_size);
-          tft.print(entry.txt);
-        }
+        PrintRollInfo(page_idx);
       } else {
         tft.setTextColor(TFT_RED);
         tft.setCursor(0, 60);
         tft.setTextSize(2);
-        tft.println("What Page?");
+        tft.println("Set Roll");
       }
     }
   }
@@ -604,9 +534,10 @@ class InfoMenu : public MenuBase {
   };
 
  private:
+  static  constexpr size_t INVALID_PAGE = 0xFFFFFFFF;
   static constexpr size_t CHAR_WIDTH_BIG = 10;
   static constexpr size_t CHAR_WIDTH_SMALL = 21;
-  size_t page_idx = 0;
+  size_t page_idx = INVALID_PAGE;
 };
 
 class MenuController {
