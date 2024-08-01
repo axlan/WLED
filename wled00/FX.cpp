@@ -457,7 +457,7 @@ static const char _data_FX_MODE_RAINBOW_CYCLE[] PROGMEM = "Rainbow@!,Size;;!";
 /*
  * Alternating pixels running function.
  */
-static uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false) {
+uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false) {
   int width = (theatre ? 3 : 1) + (SEGMENT.intensity >> 4);  // window
   uint32_t cycleTime = 50 + (255 - SEGMENT.speed);
   uint32_t it = strip.now / cycleTime;
@@ -823,7 +823,7 @@ static const char _data_FX_MODE_ANDROID[] PROGMEM = "Android@!,Width;!,!;!;;m12=
  * color1 = background color
  * color2 and color3 = colors of two adjacent leds
  */
-static uint16_t chase(uint32_t color1, uint32_t color2, uint32_t color3, bool do_palette) {
+uint16_t chase(uint32_t color1, uint32_t color2, uint32_t color3, bool do_palette) {
   uint16_t counter = strip.now * ((SEGMENT.speed >> 2) + 1);
   uint16_t a = (counter * SEGLEN) >> 16;
 

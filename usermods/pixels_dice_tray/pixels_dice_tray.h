@@ -46,7 +46,8 @@
 
 // Time with no updates before screen turns off (-1 to disable)
 #ifndef USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS
-  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
+  //#define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
+  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS -1
 #endif
 
 #define WLED_DEBOUNCE_THRESHOLD \
@@ -71,6 +72,7 @@ const uint8_t BATTERY_ICON_8X8[] PROGMEM = {
     0b10101011, 0b11111110, 0b00000000, 0b00000000,
 };
 
+static constexpr uint8_t INVALID_ROLL = 0xFF;
 static constexpr size_t NUM_DICE = 2;
 // NOTE: The ordering is taken into account when referencing die 1 vs die 2.
 static std::array<std::string, NUM_DICE> configured_die_names = {
@@ -79,6 +81,9 @@ static std::array<std::string, NUM_DICE> configured_die_names = {
 };
 // The ordering here matches configured_die_names.
 static std::array<pixels::PixelsDieID, NUM_DICE> connected_die_ids = {0, 0};
+static std::array<uint8_t, NUM_DICE> last_die_values = {INVALID_ROLL,
+                                                        INVALID_ROLL};
+static uint8_t last_die_value = INVALID_ROLL;
 
 // The vectors to hold results queried from the library
 // Since vectors allocate data, it's more efficient to keep reusing objects
@@ -95,35 +100,16 @@ static bool Contains(const C& container, T value) {
          container.end();
 }
 
-static uint16_t my_blink() {
-  uint32_t color1 = SEGCOLOR(0);
-  uint32_t color2 = SEGCOLOR(1);
-  uint32_t cycleTime = (255 - SEGMENT.speed) * 20;
-  uint32_t onTime = FRAMETIME;
-  onTime += ((cycleTime * SEGMENT.intensity) >> 8);
-  cycleTime += FRAMETIME * 2;
-  uint32_t it = strip.now / cycleTime;
-  uint32_t rem = strip.now % cycleTime;
-
-  bool on = false;
-  if (it !=
-          SEGENV
-              .step  //new iteration, force on state for one frame, even if set time is too brief
-      || rem <= onTime) {
-    on = true;
-  }
-
-  SEGENV.step = it;  //save previous iteration
-
-  uint32_t color = on ? color1 : color2;
-  SEGMENT.fill(color);
-
-  return FRAMETIME;
+static void PrintLnInBox(const char* txt, uint32_t color) {
+  int16_t sx = tft.getCursorX();
+  int16_t sy = tft.getCursorY();
+  tft.setCursor(sx + 2, sy);
+  tft.print(txt);
+  int16_t w = tft.getCursorX() - sx + 1;
+  tft.println();
+  int16_t h = tft.getCursorY() - sy - 1;
+  tft.drawRect(sx, sy, w, h, color);
 }
-//<Effect parameters>;<Colors>;<Palette>;<Flags>;<Defaults>
-// https://kno.wled.ge/interfaces/json-api/#effect-metadata
-// speed/intesity, 2 colors, no palette, flags
-static const char _data_FX_MODE_MYBLINK[] PROGMEM = "MyBLINK@!,!;!,!;;01";
 
 // These are updated in the main loop, but accessed by the effect functions as
 // well. My understand is that both of these accesses should be running on the
@@ -134,9 +120,37 @@ static const char _data_FX_MODE_MYBLINK[] PROGMEM = "MyBLINK@!,!;!,!;;01";
 static pixels::RollUpdates dice_effect_state;
 
 extern uint16_t mode_breath();
-extern uint16_t mode_aurora();
+extern uint16_t mode_blends();
+extern uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false);
+extern uint16_t mode_glitter();
+extern uint16_t mode_gravcenter();
 
-static uint16_t basic_roll() {
+static uint16_t simple_roll() {
+  if (!dice_effect_state.empty()) {
+    // Only keep last state.
+    if (dice_effect_state.size() > 1) {
+      dice_effect_state[0] = dice_effect_state.back();
+      dice_effect_state.resize(1);
+    }
+
+    auto roll = dice_effect_state.end()->second;
+
+    if (roll.state != pixels::RollState::ON_FACE) {
+      SEGMENT.fill(0);
+    } else {
+      uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
+      for (int i = 0; i <= num_segments; i++) {
+        SEGMENT.setPixelColor(i, SEGCOLOR(0));
+      }
+    }
+  } else {
+    SEGMENT.fill(0);
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_SIMPLE_DIE[] PROGMEM = "DieSimple@;!;;01";
+
+static uint16_t pulse_roll() {
   if (!dice_effect_state.empty()) {
     // Only keep last state.
     if (dice_effect_state.size() > 1) {
@@ -149,39 +163,66 @@ static uint16_t basic_roll() {
     if (roll.state != pixels::RollState::ON_FACE) {
       return mode_breath();
     } else {
-      uint16_t ret = mode_aurora();
+      uint16_t ret = mode_blends();
       uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
       for (int i = num_segments; i < SEGLEN; i++) {
         SEGMENT.setPixelColor(i, SEGCOLOR(1));
       }
       return ret;
     }
+  } else {
+    return mode_breath();
   }
   return FRAMETIME;
-
-  // uint32_t color1 = SEGCOLOR(0);
-  // uint32_t color2 = SEGCOLOR(1);
-  // uint32_t cycleTime = (255 - SEGMENT.speed)*20;
-  // uint32_t onTime = FRAMETIME;
-  // onTime += ((cycleTime * SEGMENT.intensity) >> 8);
-  // cycleTime += FRAMETIME*2;
-  // uint32_t it = strip.now / cycleTime;
-  // uint32_t rem = strip.now % cycleTime;
-
-  // bool on = false;
-  // if (it != SEGENV.step //new iteration, force on state for one frame, even if set time is too brief
-  //     || rem <= onTime) {
-  //   on = true;
-  // }
-
-  // SEGENV.step = it; //save previous iteration
-
-  // uint32_t color = on ? color1 : color2;
-  // SEGMENT.fill(color);
-
-  // return FRAMETIME;
 }
-static const char _data_FX_MODE_DIEROLL[] PROGMEM = "DieRoll@!;!,!;!;01";
+static const char _data_FX_MODE_PULSE_DIE[] PROGMEM =
+    "DiePulse@!,!;!,!;!;01;sx=24,pal=50";
+
+uint8_t target = 10;
+static uint16_t check_roll() {
+  if (!dice_effect_state.empty()) {
+    // Only keep last state.
+    if (dice_effect_state.size() > 1) {
+      dice_effect_state[0] = dice_effect_state.back();
+      dice_effect_state.resize(1);
+    }
+
+    auto roll = dice_effect_state.end()->second;
+
+    if (roll.state != pixels::RollState::ON_FACE) {
+      return running(SEGCOLOR(0), SEGCOLOR(2));
+    } else {
+      if (roll.current_face + 1 >= target) {
+        return mode_glitter();
+      } else {
+        return mode_gravcenter();
+      }
+    }
+  } else {
+    return running(SEGCOLOR(0), SEGCOLOR(2));
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_CHECK_DIE[] PROGMEM =
+    "DieCheck@!,!;1,2,3;!;01;pal=0,ix=128,m12=2,si=0";
+
+void SetDefaultColors(uint8_t mode) {
+  Segment& seg = strip.getMainSegment();
+  switch (mode) {
+    case FX_MODE_SIMPLE_D20:
+      seg.setColor(0, GREEN);
+      break;
+    case FX_MODE_PULSE_D20:
+      seg.setColor(0, GREEN);
+      seg.setColor(1, RED);
+      break;
+    case FX_MODE_CHECK_D20:
+      seg.setColor(0, RED);
+      seg.setColor(1, 0);
+      seg.setColor(2, GREEN);
+      break;
+  }
+}
 
 class RollCountWidget {
  private:
@@ -382,7 +423,11 @@ class EffectMenu : public MenuBase {
         tft.setTextColor(TFT_WHITE);
         tft.setCursor(0, 0);
         tft.setTextSize(2);
-        tft.println(lineBuffer);
+        PrintLnInBox(lineBuffer, (field_idx == 0) ? TFT_BLUE : TFT_BLACK);
+        if (mode == FX_MODE_CHECK_D20) {
+          snprintf(lineBuffer, sizeof(lineBuffer), "PASS: %u", target);
+          PrintLnInBox(lineBuffer, (field_idx == 1) ? TFT_BLUE : TFT_BLACK);
+        }
       } else {
         char lineBuffer[CHAR_WIDTH_SMALL + 1];
         extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_SMALL);
@@ -394,13 +439,174 @@ class EffectMenu : public MenuBase {
     }
   }
 
-  void HandleButton(ButtonType type, uint8_t b) override {};
+  void HandleButton(ButtonType type, uint8_t b) override {
+    Segment& seg = strip.getMainSegment();
+    auto mode_itr =
+        std::find(DIE_LED_MODES.begin(), DIE_LED_MODES.end(), seg.mode);
+    if (mode_itr != DIE_LED_MODES.end()) {
+      mode_idx = mode_itr - DIE_LED_MODES.begin();
+    }
+
+    if (mode_itr == DIE_LED_MODES.end()) {
+      seg.setMode(DIE_LED_MODES[mode_idx]);
+    } else {
+      if (type == ButtonType::LONG) {
+        seg.loadModeDefaults();
+        SetDefaultColors(DIE_LED_MODES[mode_idx]);
+      } else if (b == 0) {
+        field_idx = (field_idx + 1) % DIE_LED_MODE_NUM_FIELDS[mode_idx];
+      } else {
+        if (field_idx == 0) {
+          mode_idx = (mode_idx + 1) % DIE_LED_MODES.size();
+          seg.setMode(DIE_LED_MODES[mode_idx]);
+        } else if (DIE_LED_MODES[mode_idx] == FX_MODE_CHECK_D20 &&
+                   field_idx == 1) {
+          target = last_die_value + 1;
+        }
+      }
+    }
+  };
 
  private:
-  static constexpr std::array<uint8_t, 1> DIE_LED_MODES = {FX_MODE_BASIC_D20};
+  static constexpr std::array<uint8_t, 3> DIE_LED_MODES = {
+      FX_MODE_SIMPLE_D20, FX_MODE_PULSE_D20, FX_MODE_CHECK_D20};
+  static constexpr std::array<uint8_t, 3> DIE_LED_MODE_NUM_FIELDS = {1, 1, 2};
   static constexpr size_t CHAR_WIDTH_BIG = 10;
   static constexpr size_t CHAR_WIDTH_SMALL = 21;
   size_t mode_idx = 0;
+  size_t field_idx = 0;
+
+  void SetDefaults() {
+    Segment& seg = strip.getMainSegment();
+    switch (DIE_LED_MODES[mode_idx]) {
+      case FX_MODE_SIMPLE_D20:
+        seg.setColor(0, CYAN);
+        seg.setColor(1, 0);
+        break;
+      case FX_MODE_PULSE_D20:
+        seg.setPalette(50);
+        seg.setColor(0, RED);
+        break;
+      case FX_MODE_CHECK_D20:
+        seg.setPalette(0);
+        seg.setColor(0, RED);
+        seg.setColor(1, 0);
+        break;
+    }
+  }
+};
+
+static constexpr int INFO_VAR_LEVEL = 9;
+static constexpr int INFO_VAR_SPELL_ABL = 6;
+static constexpr int INFO_VAR_BAB = 6;
+
+template <std::intmax_t N>
+class to_string_t {
+  constexpr static auto buflen() noexcept {
+    unsigned int len = N > 0 ? 1 : 2;
+    for (auto n = N; n; len++, n /= 10)
+      ;
+    return len;
+  }
+
+  char buf[buflen()] = {};
+
+ public:
+  constexpr to_string_t() noexcept {
+    auto ptr = buf + buflen();
+    *--ptr = '\0';
+
+    if (N != 0) {
+      for (auto n = N; n; n /= 10)
+        *--ptr = "0123456789"[(N < 0 ? -1 : 1) * (n % 10)];
+      if (N < 0)
+        *--ptr = '-';
+    } else {
+      buf[0] = '0';
+    }
+  }
+
+  constexpr operator const char*() const { return buf; }
+};
+
+template <std::intmax_t N>
+constexpr to_string_t<N> to_string;
+
+struct InfoRoll {
+  uint8_t num = 0;
+  uint8_t sides = 0;
+  int8_t bonus = 0;
+};
+
+struct InfoText {
+  uint8_t font_size = 0;
+  const char* txt = "";
+};
+
+struct InfoPage {
+  std::vector<InfoText> text;
+  std::vector<InfoRoll> rolls;
+};
+
+const std::map<size_t, InfoPage> INFO_PAGES = {
+    {1, InfoPage{{
+            InfoText{.font_size = 2, .txt = "Barbed Chains\nAtk "},
+            InfoText{.font_size = 2,
+                     .txt = to_string<INFO_VAR_SPELL_ABL + INFO_VAR_BAB>},
+            InfoText{.font_size = 2, .txt = " Rng "},
+            InfoText{.font_size = 2, .txt = to_string<25 + INFO_VAR_LEVEL * 5>},
+        }}}};
+
+// const std::map<size_t, InfoPage> INFO_PAGES = {
+//   {1, InfoPage{std::vector<Text>{
+//         Text{.font_size=2, .txt="Barbed Chains\nAtk "},
+//         Text{.font_size=2, .txt=to_string_t<INFO_VAR_SPELL_ABL + INFO_VAR_BAB>},
+//         Text{.font_size=2, .txt=" Rng "},
+//         Text{.font_size=2, .txt=to_string_t<25 + INFO_VAR_LEVEL * 5>},
+//       },
+//       {Roll{1,6}}}},
+//   //{2, InfoPage{{{}}, {}}},
+// };
+
+class InfoMenu : public MenuBase {
+ public:
+  InfoMenu() = default;
+
+  void Update() override {}
+
+  void Draw(bool force_redraw) override {
+    if (force_redraw) {
+      tft.fillScreen(TFT_BLACK);
+      if (INFO_PAGES.count(page_idx)) {
+        const InfoPage& info_page = INFO_PAGES.at(page_idx);
+        tft.setTextColor(TFT_WHITE);
+        tft.setCursor(0, 0);
+        for (const auto& entry : info_page.text) {
+          tft.setTextSize(entry.font_size);
+          tft.print(entry.txt);
+        }
+      } else {
+        tft.setTextColor(TFT_RED);
+        tft.setCursor(0, 60);
+        tft.setTextSize(2);
+        tft.println("What Page?");
+      }
+    }
+  }
+
+  void HandleButton(ButtonType type, uint8_t b) override {
+    for (size_t i = 0; i < NUM_DICE; i++) {
+      if (last_die_values[i] != INVALID_ROLL) {
+        page_idx = last_die_values[i];
+        break;
+      }
+    }
+  };
+
+ private:
+  static constexpr size_t CHAR_WIDTH_BIG = 10;
+  static constexpr size_t CHAR_WIDTH_SMALL = 21;
+  size_t page_idx = 0;
 };
 
 class MenuController {
@@ -434,7 +640,9 @@ class MenuController {
 
   DiceStatusMenu status_menu;
   EffectMenu effect_menu;
-  const std::array<MenuBase*, 2> menu_ptrs = {&status_menu, &effect_menu};
+  InfoMenu info_menu;
+  const std::array<MenuBase*, 3> menu_ptrs = {&status_menu, &effect_menu,
+                                              &info_menu};
 };
 MenuController menu_ctrl;
 
@@ -484,7 +692,7 @@ class PixelsDiceTrayUsermod : public Usermod {
    * You can use it to initialize variables, sensors or similar.
    */
   void setup() override {
-    //Serial.begin(115200);
+    Serial.begin(115200);
     DEBUG_PRINTLN(F("Usermod TFT Display init"));
     SetSPIPinsFromMacros();
     PinManagerPinType spiPins[] = {
@@ -511,7 +719,9 @@ class PixelsDiceTrayUsermod : public Usermod {
     // "E (1513) wifi:Error! Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled!!!!!!"
     noWifiSleep = false;
 
-    strip.addEffect(FX_MODE_BASIC_D20, &basic_roll, _data_FX_MODE_DIEROLL);
+    strip.addEffect(FX_MODE_SIMPLE_D20, &simple_roll, _data_FX_MODE_SIMPLE_DIE);
+    strip.addEffect(FX_MODE_PULSE_D20, &pulse_roll, _data_FX_MODE_PULSE_DIE);
+    strip.addEffect(FX_MODE_CHECK_D20, &check_roll, _data_FX_MODE_CHECK_DIE);
 
     tft.init();
     tft.setRotation(rotation);
@@ -598,27 +808,42 @@ class PixelsDiceTrayUsermod : public Usermod {
     for (size_t i = 0; i < NUM_DICE; i++) {
       if (!die_connected[i]) {
         connected_die_ids[i] = 0;
+        last_die_values[i] = INVALID_ROLL;
         all_found = false;
       } else {
         none_found = false;
       }
     }
 
+    // Update last_die_values
+    for (const auto& roll : roll_updates) {
+      if (roll.second.state == pixels::RollState::ON_FACE) {
+        last_die_value = roll.second.current_face;
+        for (size_t i = 0; i < NUM_DICE; i++) {
+          if (connected_die_ids[i] == roll.first) {
+            last_die_values[i] = last_die_value;
+          }
+        }
+      }
+    }
+
+#if USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS > 0
     if (none_found) {
       if (millis() - last_die_connected_time >
           USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS) {
-            // Turn off backlight and go to sleep.
-            // Since none of the wake up pins are wired up, expect to sleep
-            // until power cycle or reset, so don't need to handle normal
-            // wakeup.
-            EnableBacklight(false);
-            gpio_hold_en((gpio_num_t)TFT_BL);
-            gpio_deep_sleep_hold_en();
-            esp_deep_sleep_start();
-          }
+        // Turn off backlight and go to sleep.
+        // Since none of the wake up pins are wired up, expect to sleep
+        // until power cycle or reset, so don't need to handle normal
+        // wakeup.
+        EnableBacklight(false);
+        gpio_hold_en((gpio_num_t)TFT_BL);
+        gpio_deep_sleep_hold_en();
+        esp_deep_sleep_start();
+      }
     } else {
       last_die_connected_time = millis();
     }
+#endif
 
     if (pixels::IsScanning() && all_found) {
       pixels::StopScanning();

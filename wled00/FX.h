@@ -318,9 +318,11 @@
 #define FX_MODE_ROCKTAVES              185
 #define FX_MODE_2DAKEMI                186
 
-#define FX_MODE_BASIC_D20              187
+#define FX_MODE_SIMPLE_D20             187
+#define FX_MODE_PULSE_D20              188
+#define FX_MODE_CHECK_D20              189
 
-#define MODE_COUNT                     188
+#define MODE_COUNT                     190
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -545,6 +547,7 @@ typedef struct Segment {
     void    setCCT(uint16_t k);
     void    setOpacity(uint8_t o);
     void    setOption(uint8_t n, bool val);
+    void    loadModeDefaults(void);
     void    setMode(uint8_t fx, bool loadDefaults = false);
     void    setPalette(uint8_t pal);
     uint8_t differs(Segment& b) const;

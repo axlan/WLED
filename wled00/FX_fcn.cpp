@@ -564,6 +564,25 @@ void Segment::setOption(uint8_t n, bool val) {
   if (!(n == SEG_OPTION_SELECTED || n == SEG_OPTION_RESET)) stateChanged = true; // send UDP/WS broadcast
 }
 
+void Segment::loadModeDefaults(void) {
+  int sOpt;
+  sOpt = extractModeDefaults(mode, "sx");  speed     = (sOpt >= 0) ? sOpt : DEFAULT_SPEED;
+  sOpt = extractModeDefaults(mode, "ix");  intensity = (sOpt >= 0) ? sOpt : DEFAULT_INTENSITY;
+  sOpt = extractModeDefaults(mode, "c1");  custom1   = (sOpt >= 0) ? sOpt : DEFAULT_C1;
+  sOpt = extractModeDefaults(mode, "c2");  custom2   = (sOpt >= 0) ? sOpt : DEFAULT_C2;
+  sOpt = extractModeDefaults(mode, "c3");  custom3   = (sOpt >= 0) ? sOpt : DEFAULT_C3;
+  sOpt = extractModeDefaults(mode, "o1");  check1    = (sOpt >= 0) ? (bool)sOpt : false;
+  sOpt = extractModeDefaults(mode, "o2");  check2    = (sOpt >= 0) ? (bool)sOpt : false;
+  sOpt = extractModeDefaults(mode, "o3");  check3    = (sOpt >= 0) ? (bool)sOpt : false;
+  sOpt = extractModeDefaults(mode, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
+  sOpt = extractModeDefaults(mode, "si");  if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 3);
+  sOpt = extractModeDefaults(mode, "rev"); if (sOpt >= 0) reverse   = (bool)sOpt;
+  sOpt = extractModeDefaults(mode, "mi");  if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
+  sOpt = extractModeDefaults(mode, "rY");  if (sOpt >= 0) reverse_y = (bool)sOpt;
+  sOpt = extractModeDefaults(mode, "mY");  if (sOpt >= 0) mirror_y  = (bool)sOpt; // NOTE: setting this option is a risky business
+  sOpt = extractModeDefaults(mode, "pal"); if (sOpt >= 0) setPalette(sOpt); //else setPalette(0);
+}
+
 void Segment::setMode(uint8_t fx, bool loadDefaults) {
   // skip reserved
   while (fx < strip.getModeCount() && strncmp_P("RSVD", strip.getModeData(fx), 4) == 0) fx++;
@@ -576,22 +595,7 @@ void Segment::setMode(uint8_t fx, bool loadDefaults) {
     mode = fx;
     // load default values from effect string
     if (loadDefaults) {
-      int sOpt;
-      sOpt = extractModeDefaults(fx, "sx");  speed     = (sOpt >= 0) ? sOpt : DEFAULT_SPEED;
-      sOpt = extractModeDefaults(fx, "ix");  intensity = (sOpt >= 0) ? sOpt : DEFAULT_INTENSITY;
-      sOpt = extractModeDefaults(fx, "c1");  custom1   = (sOpt >= 0) ? sOpt : DEFAULT_C1;
-      sOpt = extractModeDefaults(fx, "c2");  custom2   = (sOpt >= 0) ? sOpt : DEFAULT_C2;
-      sOpt = extractModeDefaults(fx, "c3");  custom3   = (sOpt >= 0) ? sOpt : DEFAULT_C3;
-      sOpt = extractModeDefaults(fx, "o1");  check1    = (sOpt >= 0) ? (bool)sOpt : false;
-      sOpt = extractModeDefaults(fx, "o2");  check2    = (sOpt >= 0) ? (bool)sOpt : false;
-      sOpt = extractModeDefaults(fx, "o3");  check3    = (sOpt >= 0) ? (bool)sOpt : false;
-      sOpt = extractModeDefaults(fx, "m12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7); else map1D2D = M12_Pixels;  // reset mapping if not defined (2D FX may not work)
-      sOpt = extractModeDefaults(fx, "si");  if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 3);
-      sOpt = extractModeDefaults(fx, "rev"); if (sOpt >= 0) reverse   = (bool)sOpt;
-      sOpt = extractModeDefaults(fx, "mi");  if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
-      sOpt = extractModeDefaults(fx, "rY");  if (sOpt >= 0) reverse_y = (bool)sOpt;
-      sOpt = extractModeDefaults(fx, "mY");  if (sOpt >= 0) mirror_y  = (bool)sOpt; // NOTE: setting this option is a risky business
-      sOpt = extractModeDefaults(fx, "pal"); if (sOpt >= 0) setPalette(sOpt); //else setPalette(0);
+      loadModeDefaults();
     }
     markForReset();
     stateChanged = true; // send UDP/WS broadcast
