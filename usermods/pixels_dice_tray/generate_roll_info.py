@@ -9,6 +9,9 @@ def eprint(*args, **kwargs):
 CASTER_LEVEL = 9
 SPELL_ABILITY_MOD = 6
 BASE_ATK_BONUS = 6
+SIZE_BONUS = 1
+STR_BONUS = 2
+DEX_BONUS = -1
 
 TFT_BLACK       =0x0000
 TFT_NAVY        =0x000F
@@ -52,9 +55,8 @@ SCREEN_SIZE = Size(128, 128)
 def short_range() -> int:
   return 25 + 5 * CASTER_LEVEL
 
-ENTRIES = {
-0: tuple(["Barb Chain", f'''\
-$SIZE(2)
+ENTRIES = [
+tuple(["Barb Chain", f'''\
 $COLOR({TFT_RED})
 Barb Chain
 $COLOR({TFT_WHITE})
@@ -64,8 +66,7 @@ $WRAP(1)
 $SIZE(1)
 Summon {1 + math.floor((CASTER_LEVEL-1)/3)} chains. Make a melee atk 1d6 or a trip CMD=AT. On a hit make Will save or shaken 1d4 rnds.
 ''']),
-1: tuple(["Saves", f'''\
-$SIZE(2)
+tuple(["Saves", f'''\
 $COLOR({TFT_GREEN})
 Saves
 $COLOR({TFT_WHITE})
@@ -73,15 +74,37 @@ FORT 8
 REFLEX 8
 WILL 9
 ''']),
-}
+tuple(["Skill", f'''\
+Skill
+''']),
+tuple(["Attack", f'''\
+Attack
+Melee +{BASE_ATK_BONUS + SIZE_BONUS + STR_BONUS}
+Range +{BASE_ATK_BONUS + SIZE_BONUS + DEX_BONUS}
+''']),
+tuple(["Cure", f'''\
+Cure
+Lit 1d8+{min(5, CASTER_LEVEL)}
+Mod 2d8+{min(10, CASTER_LEVEL)}
+Ser 3d8+{min(15, CASTER_LEVEL)}
+''']),
+tuple(["Concentrate", f'''\
+Concentrat
++{CASTER_LEVEL + SPELL_ABILITY_MOD}
+$SIZE(1)
+Defensive 15+2*SP_LV
+Dmg 10+DMG+SP_LV
+Grapple 10+CMB+SP_LV
+''']),
+]
 
 RE_SIZE = re.compile(r'\$SIZE\(([0-9])\)')
 RE_COLOR = re.compile(r'\$COLOR\(([0-9]+)\)')
 RE_WRAP = re.compile(r'\$WRAP\(([0-9])\)')
 
 def main():
-  for key, entry in ENTRIES.items():
-    size = 1
+  for key, entry in enumerate(ENTRIES):
+    size = 2
     wrap = False
     y_loc = 0
     results = []
@@ -129,7 +152,7 @@ static void PrintRoll{key}() {{
 ''')
 
   results = []
-  for key, entry in ENTRIES.items():
+  for key, entry in enumerate(ENTRIES):
     results.append(f'''\
 case {key}:
   return "{entry[0]}";''')
@@ -146,7 +169,7 @@ static const char* GetRollName(uint8_t key) {{
 ''')
 
   results = []
-  for key, entry in ENTRIES.items():
+  for key, entry in enumerate(ENTRIES):
     results.append(f'''\
 case {key}:
   PrintRoll{key}();
@@ -156,15 +179,19 @@ case {key}:
 
   print(f'''\
 static void PrintRollInfo(uint8_t key) {{
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(0, 0);
+  tft.setTextSize(2);
   switch (key) {{
 {cases}
   }}
   tft.setTextColor(TFT_RED);
   tft.setCursor(0, 60);
-  tft.setTextSize(2);
   tft.println("Unknown");
 }}
 ''')
+
+  print(f'static constexpr size_t NUM_ROLL_INFOS = {len(ENTRIES)};')
 
 
 main()

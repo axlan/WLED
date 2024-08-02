@@ -96,6 +96,12 @@ pixels::BatteryUpdates battery_updates;
 
 TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
 
+uint8_t roll_target = 10;
+uint8_t roll_label = INVALID_ROLL;
+
+char mqtt_topic_buffer[MQTT_MAX_TOPIC_LEN + 16];
+char mqtt_data_buffer[128];
+
 template <typename C, typename T>
 static bool Contains(const C& container, T value) {
   return std::find(container.begin(), container.end(), value) !=
@@ -180,7 +186,6 @@ static uint16_t pulse_roll() {
 static const char _data_FX_MODE_PULSE_DIE[] PROGMEM =
     "DiePulse@!,!;!,!;!;01;sx=24,pal=50";
 
-uint8_t target = 10;
 static uint16_t check_roll() {
   if (!dice_effect_state.empty()) {
     // Only keep last state.
@@ -194,7 +199,7 @@ static uint16_t check_roll() {
     if (roll.state != pixels::RollState::ON_FACE) {
       return running(SEGCOLOR(0), SEGCOLOR(2));
     } else {
-      if (roll.current_face + 1 >= target) {
+      if (roll.current_face + 1 >= roll_target) {
         return mode_glitter();
       } else {
         return mode_gravcenter();
@@ -427,7 +432,7 @@ class EffectMenu : public MenuBase {
         tft.setTextSize(2);
         PrintLnInBox(lineBuffer, (field_idx == 0) ? TFT_BLUE : TFT_BLACK);
         if (mode == FX_MODE_CHECK_D20) {
-          snprintf(lineBuffer, sizeof(lineBuffer), "PASS: %u", target);
+          snprintf(lineBuffer, sizeof(lineBuffer), "PASS: %u", roll_target);
           PrintLnInBox(lineBuffer, (field_idx == 1) ? TFT_BLUE : TFT_BLACK);
         }
       } else {
@@ -463,7 +468,7 @@ class EffectMenu : public MenuBase {
           seg.setMode(DIE_LED_MODES[mode_idx]);
         } else if (DIE_LED_MODES[mode_idx] == FX_MODE_CHECK_D20 &&
                    field_idx == 1) {
-          target = last_die_value + 1;
+          roll_target = last_die_value + 1;
         }
       }
     }
@@ -510,11 +515,8 @@ class InfoMenu : public MenuBase {
   void Draw(bool force_redraw) override {
     if (force_redraw) {
       tft.fillScreen(TFT_BLACK);
-      if (page_idx != INVALID_PAGE) {
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_WHITE);
-        tft.setCursor(0, 0);
-        PrintRollInfo(page_idx);
+      if (roll_label != INVALID_ROLL) {
+        PrintRollInfo(roll_label);
       } else {
         tft.setTextColor(TFT_RED);
         tft.setCursor(0, 60);
@@ -525,19 +527,19 @@ class InfoMenu : public MenuBase {
   }
 
   void HandleButton(ButtonType type, uint8_t b) override {
-    for (size_t i = 0; i < NUM_DICE; i++) {
-      if (last_die_values[i] != INVALID_ROLL) {
-        page_idx = last_die_values[i];
-        break;
-      }
+    if (roll_label >= NUM_ROLL_INFOS) {
+      roll_label = 0;
+    } else if (b == 0) {
+      roll_label = (roll_label == 0) ? NUM_ROLL_INFOS - 1 : roll_label - 1;
+    } else if (b == 1) {
+      roll_label = (roll_label + 1) % NUM_ROLL_INFOS;
+    }
+    if (WLED_MQTT_CONNECTED) {
+      snprintf(mqtt_topic_buffer, sizeof(mqtt_topic_buffer), PSTR("%s/%s"),
+               mqttDeviceTopic, "dice/roll_label");
+      mqtt->publish(mqtt_topic_buffer, 0, false, GetRollName(roll_label));
     }
   };
-
- private:
-  static  constexpr size_t INVALID_PAGE = 0xFFFFFFFF;
-  static constexpr size_t CHAR_WIDTH_BIG = 10;
-  static constexpr size_t CHAR_WIDTH_SMALL = 21;
-  size_t page_idx = INVALID_PAGE;
 };
 
 class MenuController {
@@ -755,6 +757,16 @@ class PixelsDiceTrayUsermod : public Usermod {
             last_die_values[i] = last_die_value;
           }
         }
+      }
+      if (WLED_MQTT_CONNECTED) {
+        snprintf(mqtt_topic_buffer, sizeof(mqtt_topic_buffer), PSTR("%s/%s"),
+                 mqttDeviceTopic, "dice/roll");
+        const char* name = pixels::GetDieDescription(roll.first).name.c_str();
+        snprintf(mqtt_data_buffer, sizeof(mqtt_data_buffer),
+                 "{\"name\":\"%s\",\"state\":%d,\"val\":%d,\"time\":%d}", name,
+                 int(roll.second.state), roll.second.current_face + 1,
+                 roll.second.timestamp);
+        mqtt->publish(mqtt_topic_buffer, 0, false, mqtt_data_buffer);
       }
     }
 

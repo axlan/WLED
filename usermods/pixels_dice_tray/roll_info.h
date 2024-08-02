@@ -5,7 +5,6 @@
 extern TFT_eSPI tft;
 
 static void PrintRoll0() {
-  tft.setTextSize(2);
   tft.setTextColor(63488);
   tft.println("Barb Chain");
   tft.setTextColor(65535);
@@ -20,7 +19,6 @@ static void PrintRoll0() {
 }
 
 static void PrintRoll1() {
-  tft.setTextSize(2);
   tft.setTextColor(2016);
   tft.println("Saves");
   tft.setTextColor(65535);
@@ -29,17 +27,54 @@ static void PrintRoll1() {
   tft.println("WILL 9");
 }
 
+static void PrintRoll2() {
+  tft.println("Skill");
+}
+
+static void PrintRoll3() {
+  tft.println("Attack");
+  tft.println("Melee +9");
+  tft.println("Range +6");
+}
+
+static void PrintRoll4() {
+  tft.println("Cure");
+  tft.println("Lit 1d8+5");
+  tft.println("Mod 2d8+9");
+  tft.println("Ser 3d8+9");
+}
+
+static void PrintRoll5() {
+  tft.println("Concentrat");
+  tft.println("+15");
+  tft.setTextSize(1);
+  tft.println("Defensive 15+2*SP_LV");
+  tft.println("Dmg 10+DMG+SP_LV");
+  tft.println("Grapple 10+CMB+SP_LV");
+}
+
 static const char* GetRollName(uint8_t key) {
   switch (key) {
     case 0:
       return "Barb Chain";
     case 1:
       return "Saves";
+    case 2:
+      return "Skill";
+    case 3:
+      return "Attack";
+    case 4:
+      return "Cure";
+    case 5:
+      return "Concentrate";
   }
   return "";
 }
 
 static void PrintRollInfo(uint8_t key) {
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(0, 0);
+  tft.setTextSize(2);
   switch (key) {
     case 0:
       PrintRoll0();
@@ -47,9 +82,22 @@ static void PrintRollInfo(uint8_t key) {
     case 1:
       PrintRoll1();
       return;
+    case 2:
+      PrintRoll2();
+      return;
+    case 3:
+      PrintRoll3();
+      return;
+    case 4:
+      PrintRoll4();
+      return;
+    case 5:
+      PrintRoll5();
+      return;
   }
   tft.setTextColor(TFT_RED);
   tft.setCursor(0, 60);
-  tft.setTextSize(2);
   tft.println("Unknown");
 }
+
+static constexpr size_t NUM_ROLL_INFOS = 6;
