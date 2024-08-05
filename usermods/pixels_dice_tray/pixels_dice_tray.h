@@ -1,44 +1,14 @@
 #pragma once
 
-#include <TFT_eSPI.h>
 #include <pixels_dice_interface.h>  // https://github.com/axlan/arduino-pixels-dice
 #include "wled.h"
 
-#include "roll_info.h"
+#include "dice_state.h"
+#include "tft_menu.h"
 
-#ifndef USER_SETUP_LOADED
-  #ifndef TFT_WIDTH
-    #error Please define TFT_WIDTH
-  #endif
-  #ifndef TFT_HEIGHT
-    #error Please define TFT_HEIGHT
-  #endif
-  #ifndef TFT_DC
-    #error Please define TFT_DC
-  #endif
-  #ifndef TFT_RST
-    #error Please define TFT_RST
-  #endif
-  #ifndef LOAD_GLCD
-    #error Please define LOAD_GLCD
-  #endif
-#endif
-#ifndef TFT_BL
-  #define TFT_BL -1
-#endif
 // Set this parameter to rotate the display. 1-3 rotate by 90,180,270 degrees.
 #ifndef USERMOD_PIXELS_DICE_TRAY_ROTATION
   #define USERMOD_PIXELS_DICE_TRAY_ROTATION 0
-#endif
-// Ideally different sized displays would have their own layouts.
-// This mod is only tested with 240x240 and 128x128 displays, so this
-// simple rescaling is sufficient.
-#ifndef USERMOD_PIXELS_DICE_TRAY_SCALE
-  #if TFT_WIDTH < 200
-    #define USERMOD_PIXELS_DICE_TRAY_SCALE 1
-  #else
-    #define USERMOD_PIXELS_DICE_TRAY_SCALE 2
-  #endif
 #endif
 
 // How often we are redrawing screen
@@ -48,8 +18,17 @@
 
 // Time with no updates before screen turns off (-1 to disable)
 #ifndef USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS
-  //#define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
-  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS -1
+  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
+#endif
+
+// Duration of each search for BLE devices.
+#ifndef BLE_SCAN_DURATION_SEC
+  #define BLE_SCAN_DURATION_SEC 4
+#endif
+
+// Time between searches for BLE devices.
+#ifndef BLE_TIME_BETWEEN_SCANS_SEC
+  #define BLE_TIME_BETWEEN_SCANS_SEC 5
 #endif
 
 #define WLED_DEBOUNCE_THRESHOLD \
@@ -61,63 +40,14 @@
 
 extern int getSignalQuality(int rssi);
 
-static constexpr size_t BLE_SCAN_DURATION_SEC = 4;
-static constexpr size_t BLE_TIME_BETWEEN_SCANS_SEC = 5;
+// Reuse FX display functions.
+extern uint16_t mode_breath();
+extern uint16_t mode_blends();
+extern uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false);
+extern uint16_t mode_glitter();
+extern uint16_t mode_gravcenter();
 
-const uint8_t LIGHTNING_ICON_8X8[] PROGMEM = {
-    0b00001111, 0b00010010, 0b00100100, 0b01001111,
-    0b10000001, 0b11110010, 0b00010100, 0b00011000,
-};
-
-const uint8_t BATTERY_ICON_8X8[] PROGMEM = {
-    0b00000000, 0b00000000, 0b11111110, 0b10101011,
-    0b10101011, 0b11111110, 0b00000000, 0b00000000,
-};
-
-static constexpr uint8_t INVALID_ROLL = 0xFF;
-static constexpr size_t NUM_DICE = 2;
-// NOTE: The ordering is taken into account when referencing die 1 vs die 2.
-static std::array<std::string, NUM_DICE> configured_die_names = {
-    "Aurora",
-    "Midnight",
-};
-// The ordering here matches configured_die_names.
-static std::array<pixels::PixelsDieID, NUM_DICE> connected_die_ids = {0, 0};
-static std::array<uint8_t, NUM_DICE> last_die_values = {INVALID_ROLL,
-                                                        INVALID_ROLL};
-static uint8_t last_die_value = INVALID_ROLL;
-
-// The vectors to hold results queried from the library
-// Since vectors allocate data, it's more efficient to keep reusing objects
-// instead of declaring them on the stack
-std::vector<pixels::PixelsDieID> dice_list;
-pixels::RollUpdates roll_updates;
-pixels::BatteryUpdates battery_updates;
-
-TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
-
-uint8_t roll_target = 10;
-uint8_t roll_label = INVALID_ROLL;
-
-char mqtt_topic_buffer[MQTT_MAX_TOPIC_LEN + 16];
-char mqtt_data_buffer[128];
-
-template <typename C, typename T>
-static bool Contains(const C& container, T value) {
-  return std::find(container.begin(), container.end(), value) !=
-         container.end();
-}
-
-static void PrintLnInBox(const char* txt, uint32_t color) {
-  int16_t sx = tft.getCursorX();
-  int16_t sy = tft.getCursorY();
-  tft.setCursor(sx + 2, sy);
-  tft.print(txt);
-  int16_t w = tft.getCursorX() - sx + 1;
-  tft.println();
-  int16_t h = tft.getCursorY() - sy - 1;
-  tft.drawRect(sx, sy, w, h, color);
-}
+DiceState dice_state;
 
 // These are updated in the main loop, but accessed by the effect functions as
 // well. My understand is that both of these accesses should be running on the
@@ -126,12 +56,6 @@ static void PrintLnInBox(const char* txt, uint32_t color) {
 // these accesses are triggered by those. If synchronization was needed, I could
 // look at the example in `requestJSONBufferLock()`.
 static pixels::RollUpdates dice_effect_state;
-
-extern uint16_t mode_breath();
-extern uint16_t mode_blends();
-extern uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false);
-extern uint16_t mode_glitter();
-extern uint16_t mode_gravcenter();
 
 static uint16_t simple_roll() {
   if (!dice_effect_state.empty()) {
@@ -199,7 +123,7 @@ static uint16_t check_roll() {
     if (roll.state != pixels::RollState::ON_FACE) {
       return running(SEGCOLOR(0), SEGCOLOR(2));
     } else {
-      if (roll.current_face + 1 >= roll_target) {
+      if (roll.current_face + 1 >= dice_state.roll_target) {
         return mode_glitter();
       } else {
         return mode_gravcenter();
@@ -213,389 +137,16 @@ static uint16_t check_roll() {
 static const char _data_FX_MODE_CHECK_DIE[] PROGMEM =
     "DieCheck@!,!;1,2,3;!;01;pal=0,ix=128,m12=2,si=0";
 
-void SetDefaultColors(uint8_t mode) {
-  Segment& seg = strip.getMainSegment();
-  switch (mode) {
-    case FX_MODE_SIMPLE_D20:
-      seg.setColor(0, GREEN);
-      break;
-    case FX_MODE_PULSE_D20:
-      seg.setColor(0, GREEN);
-      seg.setColor(1, RED);
-      break;
-    case FX_MODE_CHECK_D20:
-      seg.setColor(0, RED);
-      seg.setColor(1, 0);
-      seg.setColor(2, GREEN);
-      break;
-  }
-}
-
-class RollCountWidget {
- private:
-  // Could make configurable if needed.
-  int16_t xs = 0;
-  int16_t ys = 0;
-  uint16_t border_color = TFT_RED;
-  uint16_t bar_color = TFT_GREEN;
-  uint16_t bar_width = 6;
-  uint16_t max_bar_height = 60;
-  unsigned roll_counts[20] = {0};
-  unsigned total = 0;
-  unsigned max_count = 0;
-
- public:
-  RollCountWidget(int16_t xs = 0, int16_t ys = 0,
-                  uint16_t border_color = TFT_RED,
-                  uint16_t bar_color = TFT_GREEN, uint16_t bar_width = 6,
-                  uint16_t max_bar_height = 60)
-      : xs(xs),
-        ys(ys),
-        border_color(border_color),
-        bar_color(bar_color),
-        bar_width(bar_width),
-        max_bar_height(max_bar_height) {}
-
-  void Clear() {
-    memset(roll_counts, 0, sizeof(roll_counts));
-    total = 0;
-    max_count = 0;
-  }
-
-  unsigned GetNumRolls() const { return total; }
-
-  void AddRoll(unsigned val) {
-    if (val > 19) {
-      return;
-    }
-    roll_counts[val]++;
-    total++;
-    max_count = max(roll_counts[val], max_count);
-  }
-
-  void Draw() {
-    // Add 2 pixels to lengths for boarder width.
-    tft.drawRect(xs, ys, bar_width * 20 + 2, max_bar_height + 2, border_color);
-    for (size_t i = 0; i < 20; i++) {
-      if (roll_counts[i] > 0) {
-        // Scale bar by highest count.
-        uint16_t bar_height = round(float(roll_counts[i]) / float(max_count) *
-                                    float(max_bar_height));
-        // Add space between bars
-        uint16_t padding = (bar_width > 1) ? 1 : 0;
-        // Need to start from top of bar and draw down
-        tft.fillRect(xs + 1 + bar_width * i,
-                     ys + 1 + max_bar_height - bar_height, bar_width - padding,
-                     bar_height, bar_color);
-      }
-    }
-  }
-};
-
-enum class ButtonType { SINGLE, DOUBLE, LONG };
-
-class MenuBase {
- public:
-  virtual void Update() = 0;
-
-  virtual void Draw(bool force_redraw) = 0;
-
-  virtual void HandleButton(ButtonType type, uint8_t b) = 0;
-};
-
-class DiceStatusMenu : public MenuBase {
- public:
-  DiceStatusMenu()
-      : die_roll_counts{RollCountWidget{0, 20, TFT_BLUE, TFT_GREEN, 6, 40},
-                        RollCountWidget{0, SECTION_HEIGHT + 20, TFT_BLUE,
-                                        TFT_GREEN, 6, 40}} {}
-
-  void Update() override {
-    for (size_t i = 0; i < NUM_DICE; i++) {
-      const auto die_id = connected_die_ids[i];
-      const auto connected = die_id != 0;
-
-      die_updated[i] |= connected != die_connection_status[i];
-      die_connection_status[i] = connected;
-
-      if (connected) {
-        bool charging = false;
-        for (const auto& battery : battery_updates) {
-          if (battery.first == die_id) {
-            if (die_battery[i].battery_level == INVALID_BATTERY ||
-                battery.second.is_charging != die_battery[i].is_charging) {
-              die_updated[i] = true;
-            }
-            die_battery[i] = battery.second;
-          }
-        }
-
-        for (const auto& roll : roll_updates) {
-          if (roll.first == die_id &&
-              roll.second.state == pixels::RollState::ON_FACE) {
-            die_roll_counts[i].AddRoll(roll.second.current_face);
-            die_updated[i] = true;
-          }
-        }
-
-        for (const auto& battery : battery_updates) {
-          if (battery.first == die_id) {
-            die_battery[i] = battery.second;
-          }
-        }
-      }
-    }
-  }
-
-  void Draw(bool force_redraw) override {
-    // This could probably be optimized for partial redraws.
-    for (size_t i = 0; i < NUM_DICE; i++) {
-      const int16_t ys = SECTION_HEIGHT * i;
-      const auto die_id = connected_die_ids[i];
-      const auto connected = die_id != 0;
-      // Screen updates might be slow, yield in case network task needs to do
-      // work.
-      yield();
-      bool battery_update =
-          connected && (millis() - last_update[i] > BATTERY_REFRESH_RATE_MS);
-      if (force_redraw || die_updated[i] || battery_update) {
-        last_update[i] = millis();
-        tft.fillRect(0, ys, TFT_WIDTH, SECTION_HEIGHT, TFT_BLACK);
-        tft.drawRect(0, ys, TFT_WIDTH, SECTION_HEIGHT, TFT_BLUE);
-        if (!connected) {
-          tft.setTextColor(TFT_RED);
-          tft.setCursor(2, ys + 4);
-          tft.setTextSize(2);
-          tft.println(configured_die_names[i].c_str());
-          tft.setCursor(2, tft.getCursorY());
-          tft.print("Waiting...");
-        } else {
-          tft.setTextColor(TFT_WHITE);
-          tft.setCursor(0, ys + 2);
-          tft.setTextSize(1);
-          tft.println(configured_die_names[i].c_str());
-          tft.print("Cnt ");
-          tft.print(die_roll_counts[i].GetNumRolls());
-          if (die_battery[i].battery_level != INVALID_BATTERY) {
-            tft.print(" Bat ");
-            tft.print(die_battery[i].battery_level);
-            tft.print("%");
-            if (die_battery[i].is_charging) {
-              tft.drawBitmap(tft.getCursorX(), tft.getCursorY(),
-                             LIGHTNING_ICON_8X8, 8, 8, TFT_YELLOW);
-            }
-          }
-          die_roll_counts[i].Draw();
-        }
-        die_updated[i] = false;
-      }
-    }
-  }
-
-  void HandleButton(ButtonType type, uint8_t b) override {
-    if (type == ButtonType::LONG) {
-      for (size_t i = 0; i < NUM_DICE; i++) {
-        die_roll_counts[i].Clear();
-        die_updated[i] = true;
-      }
-    }
-  };
-
- private:
-  static constexpr long BATTERY_REFRESH_RATE_MS = 60 * 1000;
-  static constexpr int16_t SECTION_HEIGHT = TFT_HEIGHT / NUM_DICE;
-  static constexpr uint8_t INVALID_BATTERY = 0xFF;
-  std::array<long, NUM_DICE> last_update = {0};
-  std::array<bool, NUM_DICE> die_connection_status = {false};
-  std::array<bool, NUM_DICE> die_updated = {false};
-  std::array<pixels::BatteryEvent, NUM_DICE> die_battery = {
-      pixels::BatteryEvent{INVALID_BATTERY, false},
-      pixels::BatteryEvent{INVALID_BATTERY, false}};
-  std::array<RollCountWidget, NUM_DICE> die_roll_counts;
-};
-
-class EffectMenu : public MenuBase {
- public:
-  EffectMenu() = default;
-
-  void Update() override {}
-
-  void Draw(bool force_redraw) override {
-    if (force_redraw) {
-      tft.fillScreen(TFT_BLACK);
-      uint8_t mode = strip.getMainSegment().mode;
-      if (Contains(DIE_LED_MODES, mode)) {
-        char lineBuffer[CHAR_WIDTH_BIG + 1];
-        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_BIG);
-        tft.setTextColor(TFT_WHITE);
-        tft.setCursor(0, 0);
-        tft.setTextSize(2);
-        PrintLnInBox(lineBuffer, (field_idx == 0) ? TFT_BLUE : TFT_BLACK);
-        if (mode == FX_MODE_CHECK_D20) {
-          snprintf(lineBuffer, sizeof(lineBuffer), "PASS: %u", roll_target);
-          PrintLnInBox(lineBuffer, (field_idx == 1) ? TFT_BLUE : TFT_BLACK);
-        }
-      } else {
-        char lineBuffer[CHAR_WIDTH_SMALL + 1];
-        extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_SMALL);
-        tft.setTextColor(TFT_WHITE);
-        tft.setCursor(0, 0);
-        tft.setTextSize(1);
-        tft.println(lineBuffer);
-      }
-    }
-  }
-
-  void HandleButton(ButtonType type, uint8_t b) override {
-    Segment& seg = strip.getMainSegment();
-    auto mode_itr =
-        std::find(DIE_LED_MODES.begin(), DIE_LED_MODES.end(), seg.mode);
-    if (mode_itr != DIE_LED_MODES.end()) {
-      mode_idx = mode_itr - DIE_LED_MODES.begin();
-    }
-
-    if (mode_itr == DIE_LED_MODES.end()) {
-      seg.setMode(DIE_LED_MODES[mode_idx]);
-    } else {
-      if (type == ButtonType::LONG) {
-        seg.loadModeDefaults();
-        SetDefaultColors(DIE_LED_MODES[mode_idx]);
-      } else if (b == 0) {
-        field_idx = (field_idx + 1) % DIE_LED_MODE_NUM_FIELDS[mode_idx];
-      } else {
-        if (field_idx == 0) {
-          mode_idx = (mode_idx + 1) % DIE_LED_MODES.size();
-          seg.setMode(DIE_LED_MODES[mode_idx]);
-        } else if (DIE_LED_MODES[mode_idx] == FX_MODE_CHECK_D20 &&
-                   field_idx == 1) {
-          roll_target = last_die_value + 1;
-        }
-      }
-    }
-  };
-
- private:
-  static constexpr std::array<uint8_t, 3> DIE_LED_MODES = {
-      FX_MODE_SIMPLE_D20, FX_MODE_PULSE_D20, FX_MODE_CHECK_D20};
-  static constexpr std::array<uint8_t, 3> DIE_LED_MODE_NUM_FIELDS = {1, 1, 2};
-  static constexpr size_t CHAR_WIDTH_BIG = 10;
-  static constexpr size_t CHAR_WIDTH_SMALL = 21;
-  size_t mode_idx = 0;
-  size_t field_idx = 0;
-
-  void SetDefaults() {
-    Segment& seg = strip.getMainSegment();
-    switch (DIE_LED_MODES[mode_idx]) {
-      case FX_MODE_SIMPLE_D20:
-        seg.setColor(0, CYAN);
-        seg.setColor(1, 0);
-        break;
-      case FX_MODE_PULSE_D20:
-        seg.setPalette(50);
-        seg.setColor(0, RED);
-        break;
-      case FX_MODE_CHECK_D20:
-        seg.setPalette(0);
-        seg.setColor(0, RED);
-        seg.setColor(1, 0);
-        break;
-    }
-  }
-};
-
-constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODES;
-constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODE_NUM_FIELDS;
-
-class InfoMenu : public MenuBase {
- public:
-  InfoMenu() = default;
-
-  void Update() override {}
-
-  void Draw(bool force_redraw) override {
-    if (force_redraw) {
-      tft.fillScreen(TFT_BLACK);
-      if (roll_label != INVALID_ROLL) {
-        PrintRollInfo(roll_label);
-      } else {
-        tft.setTextColor(TFT_RED);
-        tft.setCursor(0, 60);
-        tft.setTextSize(2);
-        tft.println("Set Roll");
-      }
-    }
-  }
-
-  void HandleButton(ButtonType type, uint8_t b) override {
-    if (roll_label >= NUM_ROLL_INFOS) {
-      roll_label = 0;
-    } else if (b == 0) {
-      roll_label = (roll_label == 0) ? NUM_ROLL_INFOS - 1 : roll_label - 1;
-    } else if (b == 1) {
-      roll_label = (roll_label + 1) % NUM_ROLL_INFOS;
-    }
-    if (WLED_MQTT_CONNECTED) {
-      snprintf(mqtt_topic_buffer, sizeof(mqtt_topic_buffer), PSTR("%s/%s"),
-               mqttDeviceTopic, "dice/roll_label");
-      mqtt->publish(mqtt_topic_buffer, 0, false, GetRollName(roll_label));
-    }
-  };
-};
-
-class MenuController {
- public:
-  void HandleButton(ButtonType type, uint8_t b) {
-    force_redraw = true;
-    // Switch menus with double click
-    if (ButtonType::DOUBLE == type) {
-      if (b == 0) {
-        current_index =
-            (current_index == 0) ? menu_ptrs.size() - 1 : current_index - 1;
-      } else {
-        current_index = (current_index + 1) % menu_ptrs.size();
-      }
-    } else {
-      menu_ptrs[current_index]->HandleButton(type, b);
-    }
-  }
-
-  void Update() {
-    for (auto menu_ptr : menu_ptrs) {
-      menu_ptr->Update();
-    }
-    menu_ptrs[current_index]->Draw(force_redraw);
-    force_redraw = false;
-  }
-
- private:
-  size_t current_index = 0;
-  bool force_redraw = true;
-
-  DiceStatusMenu status_menu;
-  EffectMenu effect_menu;
-  InfoMenu info_menu;
-  const std::array<MenuBase*, 3> menu_ptrs = {&status_menu, &effect_menu,
-                                              &info_menu};
-};
-MenuController menu_ctrl;
-
 class PixelsDiceTrayUsermod : public Usermod {
  private:
   bool enabled = true;
 
-  // Settings
-  unsigned font_size = USERMOD_PIXELS_DICE_TRAY_SCALE;
-  unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
-
-  // Set the pin to turn the backlight on or off if available.
-  static void EnableBacklight(bool enable) {
-#if TFT_BL > 0
-  #if USERMOD_PIXELS_DICE_TRAY_BL_ACTIVE_LOW
-    enable = !enable;
-  #endif
-    digitalWrite(TFT_BL, enable);
+#if USING_TFT_DISPLAY
+  MenuController menu_ctrl;
 #endif
-  }
+
+  // Settings
+  unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
 
   static void center(String& line, uint8_t width) {
     int len = line.length();
@@ -609,12 +160,14 @@ class PixelsDiceTrayUsermod : public Usermod {
   // NOTE: THIS MOD DOES NOT SUPPORT CHANGING THE SPI PINS FROM THE UI! The
   // TFT_eSPI library requires that they are compiled in.
   static void SetSPIPinsFromMacros() {
+#if USING_TFT_DISPLAY
     spi_mosi = TFT_MOSI;
     // Done in TFT library.
     if (TFT_MISO == TFT_MOSI) {
       spi_miso = -1;
     }
     spi_sclk = TFT_SCLK;
+#endif
   }
 
  public:
@@ -626,6 +179,8 @@ class PixelsDiceTrayUsermod : public Usermod {
    */
   void setup() override {
     Serial.begin(115200);
+
+#if USING_TFT_DISPLAY
     DEBUG_PRINTLN(F("Usermod TFT Display init"));
     SetSPIPinsFromMacros();
     PinManagerPinType spiPins[] = {
@@ -647,6 +202,7 @@ class PixelsDiceTrayUsermod : public Usermod {
       DEBUG_PRINTLN(F("Usermod TFT Display pin allocations failed."));
       return;
     }
+#endif
 
     // Need to enable WiFi sleep:
     // "E (1513) wifi:Error! Should enable WiFi modem sleep when both WiFi and Bluetooth are enabled!!!!!!"
@@ -656,20 +212,13 @@ class PixelsDiceTrayUsermod : public Usermod {
     strip.addEffect(FX_MODE_PULSE_D20, &pulse_roll, _data_FX_MODE_PULSE_DIE);
     strip.addEffect(FX_MODE_CHECK_D20, &check_roll, _data_FX_MODE_CHECK_DIE);
 
-    tft.init();
-    tft.setRotation(rotation);
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_RED);
-    tft.setCursor(0, 60);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(2 * font_size);
-    tft.print(" No Dice");
-
     // Start a background task scanning for dice.
     // On completion the discovered dice are connected to.
     pixels::ScanForDice(BLE_SCAN_DURATION_SEC, BLE_TIME_BETWEEN_SCANS_SEC);
 
-    EnableBacklight(true);
+#if USING_TFT_DISPLAY
+    menu_ctrl.Init(rotation);
+#endif
   }
 
   /*
@@ -696,25 +245,28 @@ class PixelsDiceTrayUsermod : public Usermod {
     static long last_loop_time = 0;
     static long last_die_connected_time = millis();
 
+    char mqtt_topic_buffer[MQTT_MAX_TOPIC_LEN + 16];
+    char mqtt_data_buffer[128];
+
     // Check if we time interval for redrawing passes.
     if (millis() - last_loop_time < USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS) {
       return;
     }
     last_loop_time = millis();
 
-    // Update dice_list with the connected dice
-    pixels::ListDice(dice_list);
+    // Update dice_state.dice_list with the connected dice
+    pixels::ListDice(dice_state.dice_list);
     // Get all the roll/battery updates since the last loop
-    pixels::GetDieRollUpdates(roll_updates);
-    pixels::GetDieBatteryUpdates(battery_updates);
+    pixels::GetDieRollUpdates(dice_state.roll_updates);
+    pixels::GetDieBatteryUpdates(dice_state.battery_updates);
 
     // Go through list of connected die.
-    std::array<bool, NUM_DICE> die_connected = {false, false};
-    for (auto die_id : dice_list) {
+    std::array<bool, DiceState::NUM_DICE> die_connected = {false, false};
+    for (auto die_id : dice_state.dice_list) {
       // First check if we've already matched this ID to a connected die.
       bool matched = false;
-      for (size_t i = 0; i < NUM_DICE; i++) {
-        if (die_id == connected_die_ids[i]) {
+      for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+        if (die_id == dice_state.connected_die_ids[i]) {
           die_connected[i] = true;
           matched = true;
           break;
@@ -724,10 +276,10 @@ class PixelsDiceTrayUsermod : public Usermod {
       // If this isn't already matched, check if its name matches an expected name.
       if (!matched) {
         auto description = pixels::GetDieDescription(die_id);
-        for (size_t i = 0; i < NUM_DICE; i++) {
-          if (0 == connected_die_ids[i] &&
-              description.name == configured_die_names[i]) {
-            connected_die_ids[i] = die_id;
+        for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+          if (0 == dice_state.connected_die_ids[i] &&
+              description.name == dice_state.configured_die_names[i]) {
+            dice_state.connected_die_ids[i] = die_id;
             die_connected[i] = true;
             break;
           }
@@ -738,23 +290,23 @@ class PixelsDiceTrayUsermod : public Usermod {
     // Clear connected die that weren't still present.
     bool all_found = true;
     bool none_found = true;
-    for (size_t i = 0; i < NUM_DICE; i++) {
+    for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
       if (!die_connected[i]) {
-        connected_die_ids[i] = 0;
-        last_die_values[i] = INVALID_ROLL;
+        dice_state.connected_die_ids[i] = 0;
+        dice_state.last_die_values[i] = DiceState::INVALID_ROLL;
         all_found = false;
       } else {
         none_found = false;
       }
     }
 
-    // Update last_die_values
-    for (const auto& roll : roll_updates) {
+    // Update dice_state.last_die_values
+    for (const auto& roll : dice_state.roll_updates) {
       if (roll.second.state == pixels::RollState::ON_FACE) {
-        last_die_value = roll.second.current_face;
-        for (size_t i = 0; i < NUM_DICE; i++) {
-          if (connected_die_ids[i] == roll.first) {
-            last_die_values[i] = last_die_value;
+        dice_state.last_die_value = roll.second.current_face;
+        for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+          if (dice_state.connected_die_ids[i] == roll.first) {
+            dice_state.last_die_values[i] = dice_state.last_die_value;
           }
         }
       }
@@ -770,7 +322,7 @@ class PixelsDiceTrayUsermod : public Usermod {
       }
     }
 
-#if USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS > 0
+#if USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS > 0 && USING_TFT_DISPLAY
     if (none_found) {
       if (millis() - last_die_connected_time >
           USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS) {
@@ -778,7 +330,7 @@ class PixelsDiceTrayUsermod : public Usermod {
         // Since none of the wake up pins are wired up, expect to sleep
         // until power cycle or reset, so don't need to handle normal
         // wakeup.
-        EnableBacklight(false);
+        menu_ctrl.EnableBacklight(false);
         gpio_hold_en((gpio_num_t)TFT_BL);
         gpio_deep_sleep_hold_en();
         esp_deep_sleep_start();
@@ -795,10 +347,12 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
 
     // Add updates to the effect queue.
-    dice_effect_state.insert(dice_effect_state.end(), roll_updates.begin(),
-                             roll_updates.end());
-
+    dice_effect_state.insert(dice_effect_state.end(),
+                             dice_state.roll_updates.begin(),
+                             dice_state.roll_updates.end());
+#if USING_TFT_DISPLAY
     menu_ctrl.Update();
+#endif
   }
 
   /*
@@ -812,8 +366,8 @@ class PixelsDiceTrayUsermod : public Usermod {
     if (user.isNull())
       user = root.createNestedObject("u");
 
-    JsonArray lightArr = user.createNestedArray("TFT");      // name
-    lightArr.add(enabled ? F("installed") : F("disabled"));  // unit
+    JsonArray lightArr = user.createNestedArray("DiceTray");  // name
+    lightArr.add(enabled ? F("installed") : F("disabled"));   // unit
   }
 
   /*
@@ -854,16 +408,18 @@ class PixelsDiceTrayUsermod : public Usermod {
    * deserialization in order to use custom settings!
    */
   void addToConfig(JsonObject& root) override {
-    JsonObject top = root.createNestedObject("TFT");
+    JsonObject top = root.createNestedObject("DiceTray");
+#if USING_TFT_DISPLAY
     top["rotation"] = rotation;
-    top["font_size"] = font_size;
     JsonArray pins = top.createNestedArray("pin");
     pins.add(TFT_CS);
     pins.add(TFT_DC);
     pins.add(TFT_RST);
     pins.add(TFT_BL);
+#endif
   }
 
+#if USING_TFT_DISPLAY
   void appendConfigData() override {
     oappend(SET_F("dd=addDropdown('TFT','rotation');"));
     oappend(SET_F("addOption(dd,'0 deg',0);"));
@@ -879,7 +435,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     oappend(SET_F("addInfo('TFT:pin[]',2,'','SPI RST');"));
     oappend(SET_F("addInfo('TFT:pin[]',3,'','SPI BL');"));
   }
-
+#endif
   /*
    * readFromConfig() can be used to read back the custom settings you added
    * with addToConfig(). This is called by WLED when settings are loaded
@@ -893,26 +449,26 @@ class PixelsDiceTrayUsermod : public Usermod {
    */
   bool readFromConfig(JsonObject& root) override {
     // we look for JSON object:
-    // {"TFT":{"rotation":0,"font_size":1}}
-    JsonObject top = root["TFT"];
+    // {"DiceTray":{"rotation":0,"font_size":1}}
+    JsonObject top = root["DiceTray"];
     if (top.isNull()) {
-      DEBUG_PRINTLN(F("TFT: No config found. (Using defaults.)"));
+      DEBUG_PRINTLN(F("DiceTray: No config found. (Using defaults.)"));
       return false;
     }
+#if USING_TFT_DISPLAY
     unsigned new_rotation = min(top["rotation"] | rotation, 3u);
-    unsigned new_font_size = max(top["font_size"] | font_size, 1u);
 
     // Restore the SPI pins to their compiled in defaults.
     SetSPIPinsFromMacros();
 
-    if (new_rotation != rotation || font_size != new_font_size) {
+    if (new_rotation != rotation) {
       rotation = new_rotation;
-      font_size = new_font_size;
     }
+#endif
 
     // use "return !top["newestParameter"].isNull();" when updating Usermod with
     // new features
-    return !top["TFT"].isNull();
+    return !top["DiceTray"].isNull();
   }
 
   /**
@@ -920,6 +476,7 @@ class PixelsDiceTrayUsermod : public Usermod {
    * will prevent button working in a default way.
    * Replicating button.cpp
    */
+#if USING_TFT_DISPLAY
   bool handleButton(uint8_t b) override {
     if (!enabled || b > 1  // buttons 0,1 only
         || buttonType[b] == BTN_TYPE_SWITCH || buttonType[b] == BTN_TYPE_NONE ||
@@ -979,6 +536,7 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     return true;
   }
+#endif
 
   /*
    * getId() allows you to optionally give your V2 usermod an unique ID (please

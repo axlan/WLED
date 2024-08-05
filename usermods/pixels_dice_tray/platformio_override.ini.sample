@@ -62,3 +62,16 @@ lib_deps = ${esp32s3.lib_deps}
   ESP32 BLE Arduino
   bodmer/TFT_eSPI @ 2.5.43
   axlan/pixels-dice-interface @ 1.2.0
+
+# ------------------------------------------------------------------------------
+# ESP32 dev board without screen
+# ------------------------------------------------------------------------------
+[env:esp32dev]
+build_flags = ${common.build_flags} ${esp32.build_flags} -D WLED_RELEASE_NAME=ESP32
+  ; Enable Pixels dice mod
+  -D USERMOD_PIXELS_DICE_TRAY
+lib_deps = ${esp32.lib_deps}
+  ESP32 BLE Arduino
+  axlan/pixels-dice-interface @ 1.2.0
+; Tiny file system partition, no core dump to fit BLE library.
+board_build.partitions = tools/WLED_ESP32_4MB_64KB_FS.csv

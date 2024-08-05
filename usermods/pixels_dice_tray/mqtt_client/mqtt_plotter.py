@@ -11,7 +11,8 @@ import plotly.express as px
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Command-line argument parser")
+    parser = argparse.ArgumentParser(
+        description="Generate an html plot of rolls captured by mqtt_logger.py")
     parser.add_argument("input_file", type=Path, help="Log file to plot")
     parser.add_argument(
         "-s",
@@ -57,7 +58,8 @@ def main():
             with socketserver.TCPServer(
                 ("", PORT), server.SimpleHTTPRequestHandler
             ) as httpd:
-                print(f"Serving HTTP on http://0.0.0.0:{PORT}/{output_path.name}")
+                print(
+                    f"Serving HTTP on http://0.0.0.0:{PORT}/{output_path.name}")
                 httpd.serve_forever()
         except KeyboardInterrupt:
             pass

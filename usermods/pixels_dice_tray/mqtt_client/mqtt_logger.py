@@ -37,11 +37,13 @@ def on_message(client, userdata, msg):
         )
         state["csv_fd"].flush()
         if msg_data["state"] == 1:
-            print(f"{timestamp:.3f}: {msg_data['name']} rolled {msg_data['val']}")
+            print(
+                f"{timestamp:.3f}: {msg_data['name']} rolled {msg_data['val']}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Command-line argument parser")
+    parser = argparse.ArgumentParser(
+        description="Log die rolls from WLED MQTT events to CSV.")
 
     # IP address (with a default value)
     parser.add_argument(
