@@ -66,6 +66,19 @@ lib_deps = ${esp32s3.lib_deps}
 # ------------------------------------------------------------------------------
 # ESP32 dev board without screen
 # ------------------------------------------------------------------------------
+# THIS DOES NOT WORK!!!!!!
+# While it builds and programs onto the device, I ran into a series of issues
+# trying to actually run.
+# Right after the AP init there's an allocation exception which claims to be in
+# the UDP server. There seems to be a ton of heap remaining, so the exact error
+# might be a red herring.
+# It appears that the BLE scanning task is conflicting with the networking tasks.
+# I was successfully running simple applications with the pixels-dice-interface
+# on ESP32 dev boards, so it may be an issue with too much being scheduled in
+# parallel. Also not clear exactly what difference between the ESP32 and the
+# ESP32S3 would be causing this, though they do run different BLE versions.
+# May be related to some of the issues discussed in:
+# https://github.com/Aircoookie/WLED/issues/1382
 [env:esp32dev]
 build_flags = ${common.build_flags} ${esp32.build_flags} -D WLED_RELEASE_NAME=ESP32
   ; Enable Pixels dice mod
