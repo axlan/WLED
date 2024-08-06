@@ -1,3 +1,6 @@
+/**
+ * The LED effects influenced by dice rolls.
+ */
 #pragma once
 
 #include "wled.h"
@@ -45,8 +48,16 @@ static uint16_t simple_roll() {
   }
   return FRAMETIME;
 }
+// See https://kno.wled.ge/interfaces/json-api/#effect-metadata
+// Name - DieSimple
+// Parameters -
+//   * Selected Die (custom1)
+// Colors - Uses color1
+// Palette - Not used
+// Flags - Effect is optimized for use on 1D LED strips.
+// Defaults - Selected Die set to 0xFF (USER_ANY_DIE)
 static const char _data_FX_MODE_SIMPLE_DIE[] PROGMEM =
-    "DieSimple@,,Selected Die;!;;01,c1=255";
+    "DieSimple@,,Selected Die;!;;1,c1=255";
 
 static uint16_t pulse_roll() {
   auto roll = GetLastRollForSegment();
@@ -62,7 +73,7 @@ static uint16_t pulse_roll() {
   }
 }
 static const char _data_FX_MODE_PULSE_DIE[] PROGMEM =
-    "DiePulse@!,!,Selected Die;!,!;!;01;sx=24,pal=50,c1=255";
+    "DiePulse@!,!,Selected Die;!,!;!;1;sx=24,pal=50,c1=255";
 
 static uint16_t check_roll() {
   auto roll = GetLastRollForSegment();
@@ -77,4 +88,4 @@ static uint16_t check_roll() {
   }
 }
 static const char _data_FX_MODE_CHECK_DIE[] PROGMEM =
-    "DieCheck@!,!,Selected Die,Target Roll;1,2,3;!;01;pal=0,ix=128,m12=2,si=0,c1=255,c2=10";
+    "DieCheck@!,!,Selected Die,Target Roll;1,2,3;!;1;pal=0,ix=128,m12=2,si=0,c1=255,c2=10";

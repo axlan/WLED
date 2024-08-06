@@ -1,13 +1,14 @@
+'''
+File for generating roll labels and info text for the InfoMenu.
+
+Uses a very limited markdown language for styling text.
+'''
 import math
+from pathlib import Path
 import re
-import sys
 from textwrap import indent
 
-
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
-
-
+# Variables for calculating values in info text
 CASTER_LEVEL = 9
 SPELL_ABILITY_MOD = 6
 BASE_ATK_BONUS = 6
@@ -15,6 +16,7 @@ SIZE_BONUS = 1
 STR_BONUS = 2
 DEX_BONUS = -1
 
+# TFT library color values
 TFT_BLACK       =0x0000
 TFT_NAVY        =0x000F
 TFT_DARKGREEN   =0x03E0
@@ -56,11 +58,19 @@ CHAR_SIZE = {
 
 SCREEN_SIZE = Size(128, 128)
 
-
+# Calculates distance for short range spell.
 def short_range() -> int:
     return 25 + 5 * CASTER_LEVEL
 
-
+# Entries in markdown language.
+# Parameter 0 of the tuple is the roll name
+# Parameter 1 of the tuple is the roll info.
+# The text will be shown when the roll type is selected. An error will be raised
+# if the text would unexpectedly goes past the end of the screen. There are a
+# few styling parameters that need to be on their own lines:
+# $COLOR - The color for the text
+# $SIZE - Sets the text size (see CHAR_SIZE)
+# $WRAP - By default text won't wrap and generate an error. This enables text wrapping. Lines will wrap mid-word.
 ENTRIES = [
     tuple(["Barb Chain", f'''\
 $COLOR({TFT_RED})
@@ -108,87 +118,98 @@ RE_SIZE = re.compile(r'\$SIZE\(([0-9])\)')
 RE_COLOR = re.compile(r'\$COLOR\(([0-9]+)\)')
 RE_WRAP = re.compile(r'\$WRAP\(([0-9])\)')
 
+END_HEADER_TXT = '// GENERATED\n'
 
 def main():
-    for key, entry in enumerate(ENTRIES):
-        size = 2
-        wrap = False
-        y_loc = 0
-        results = []
-        for line in entry[1].splitlines():
-            if line.startswith('$'):
-                m_size = RE_SIZE.match(line)
-                m_color = RE_COLOR.match(line)
-                m_wrap = RE_WRAP.match(line)
-                if m_size:
-                    size = int(m_size.group(1))
-                    results.append(f'tft.setTextSize({size});')
-                elif m_color:
-                    results.append(
-                        f'tft.setTextColor({int(m_color.group(1))});')
-                elif m_wrap:
-                    wrap = bool(int(m_wrap.group(1)))
-                else:
-                    eprint(f'Entry {key} unknown modifier "{line}".')
-                    exit(1)
-            else:
-                max_chars_per_line = math.floor(
-                    SCREEN_SIZE.w / CHAR_SIZE[size].w)
-                if len(line) > max_chars_per_line:
-                    if wrap:
-                        while len(line) > max_chars_per_line:
-                            results.append(
-                                f'tft.println("{line[:max_chars_per_line]}");')
-                            line = line[max_chars_per_line:].lstrip()
-                            y_loc += CHAR_SIZE[size].h
+    roll_info_file = Path(__file__).parent / 'roll_info.h'
+    old_contents = open(roll_info_file, 'r').read()
+
+    end_header = old_contents.index(END_HEADER_TXT)
+
+    with open(roll_info_file, 'w') as fd:
+        fd.write(old_contents[:end_header+len(END_HEADER_TXT)])
+
+        for key, entry in enumerate(ENTRIES):
+            size = 2
+            wrap = False
+            y_loc = 0
+            results = []
+            for line in entry[1].splitlines():
+                if line.startswith('$'):
+                    m_size = RE_SIZE.match(line)
+                    m_color = RE_COLOR.match(line)
+                    m_wrap = RE_WRAP.match(line)
+                    if m_size:
+                        size = int(m_size.group(1))
+                        results.append(f'tft.setTextSize({size});')
+                    elif m_color:
+                        results.append(
+                            f'tft.setTextColor({int(m_color.group(1))});')
+                    elif m_wrap:
+                        wrap = bool(int(m_wrap.group(1)))
                     else:
-                        eprint(f'Entry {key} line "{line}" too long.')
+                        print(f'Entry {key} unknown modifier "{line}".')
+                        exit(1)
+                else:
+                    max_chars_per_line = math.floor(
+                        SCREEN_SIZE.w / CHAR_SIZE[size].w)
+                    if len(line) > max_chars_per_line:
+                        if wrap:
+                            while len(line) > max_chars_per_line:
+                                results.append(
+                                    f'tft.println("{line[:max_chars_per_line]}");')
+                                line = line[max_chars_per_line:].lstrip()
+                                y_loc += CHAR_SIZE[size].h
+                        else:
+                            print(f'Entry {key} line "{line}" too long.')
+                            exit(1)
+
+                    if len(line) > 0:
+                        y_loc += CHAR_SIZE[size].h
+                        results.append(f'tft.println("{line}");')
+
+                    if y_loc > SCREEN_SIZE.h:
+                        print(
+                            f'Entry {key} line "{line}" went past bottom of screen.')
                         exit(1)
 
-                if len(line) > 0:
-                    y_loc += CHAR_SIZE[size].h
-                    results.append(f'tft.println("{line}");')
+            result = indent('\n'.join(results), '  ')
 
-                if y_loc > SCREEN_SIZE.h:
-                    eprint(
-                        f'Entry {key} line "{line}" went past bottom of screen.')
-                    exit(1)
-
-        result = indent('\n'.join(results), '  ')
-
-        print(f'''\
+            fd.write(f'''\
 static void PrintRoll{key}() {{
 {result}
 }}
+
 ''')
 
-    results = []
-    for key, entry in enumerate(ENTRIES):
-        results.append(f'''\
+        results = []
+        for key, entry in enumerate(ENTRIES):
+            results.append(f'''\
 case {key}:
   return "{entry[0]}";''')
 
-    cases = indent('\n'.join(results), '    ')
+        cases = indent('\n'.join(results), '    ')
 
-    print(f'''\
+        fd.write(f'''\
 static const char* GetRollName(uint8_t key) {{
   switch (key) {{
 {cases}
   }}
   return "";
 }}
+
 ''')
 
-    results = []
-    for key, entry in enumerate(ENTRIES):
-        results.append(f'''\
+        results = []
+        for key, entry in enumerate(ENTRIES):
+            results.append(f'''\
 case {key}:
   PrintRoll{key}();
   return;''')
 
-    cases = indent('\n'.join(results), '    ')
+        cases = indent('\n'.join(results), '    ')
 
-    print(f'''\
+        fd.write(f'''\
 static void PrintRollInfo(uint8_t key) {{
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(0, 0);
@@ -200,9 +221,10 @@ static void PrintRollInfo(uint8_t key) {{
   tft.setCursor(0, 60);
   tft.println("Unknown");
 }}
+
 ''')
 
-    print(f'static constexpr size_t NUM_ROLL_INFOS = {len(ENTRIES)};')
+        fd.write(f'static constexpr size_t NUM_ROLL_INFOS = {len(ENTRIES)};\n')
 
 
 main()

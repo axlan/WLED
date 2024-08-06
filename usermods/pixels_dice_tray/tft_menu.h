@@ -1,3 +1,6 @@
+/**
+ * Code for using the 128x128 LCD and two buttons on the T-QT Pro as a GUI.
+ */
 #pragma once
 
 #ifndef TFT_WIDTH
@@ -16,13 +19,20 @@
     #define TFT_BL -1
   #endif
 
+// Bitmask for icon
 const uint8_t LIGHTNING_ICON_8X8[] PROGMEM = {
     0b00001111, 0b00010010, 0b00100100, 0b01001111,
     0b10000001, 0b11110010, 0b00010100, 0b00011000,
 };
 
-TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
+TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);
 
+/**
+ * Print text with box surrounding it.
+ * 
+ * @param txt Text to draw
+ * @param color Color for box lines
+ */
 static void PrintLnInBox(const char* txt, uint32_t color) {
   int16_t sx = tft.getCursorX();
   int16_t sy = tft.getCursorY();
@@ -34,6 +44,10 @@ static void PrintLnInBox(const char* txt, uint32_t color) {
   tft.drawRect(sx, sy, w, h, color);
 }
 
+/**
+ * Override the current colors for the selected segment to the defaults for the
+ * selected die effect.
+ */
 void SetDefaultColors(uint8_t mode) {
   Segment& seg = strip.getFirstSelectedSeg();
   switch (mode) {
@@ -60,9 +74,11 @@ static uint8_t* GetCurrentRollTarget() {
   return &strip.getFirstSelectedSeg().custom2;
 }
 
+/**
+ * Class for drawing a histogram of roll results.
+ */
 class RollCountWidget {
  private:
-  // Could make configurable if needed.
   int16_t xs = 0;
   int16_t ys = 0;
   uint16_t border_color = TFT_RED;
@@ -123,12 +139,22 @@ class RollCountWidget {
 
 enum class ButtonType { SINGLE, DOUBLE, LONG };
 
+// Base class for different menu pages.
 class MenuBase {
  public:
+  /**
+   * Handle new die events and connections. Called even when menu isn't visible.
+   */
   virtual void Update(const DiceUpdate& dice_update) = 0;
 
+  /**
+   * Draw menu to the screen.
+   */
   virtual void Draw(const DiceUpdate& dice_update, bool force_redraw) = 0;
 
+  /**
+   * Handle button presses if the menu is currently active.
+   */
   virtual void HandleButton(ButtonType type, uint8_t b) = 0;
 
  protected:
@@ -137,6 +163,9 @@ class MenuBase {
 };
 DiceSettings* MenuBase::settings = nullptr;
 
+/**
+ * Menu to show connection status and roll histograms.
+ */
 class DiceStatusMenu : public MenuBase {
  public:
   DiceStatusMenu()
@@ -148,6 +177,7 @@ class DiceStatusMenu : public MenuBase {
     for (size_t i = 0; i < MAX_NUM_DICE; i++) {
       const auto die_id = dice_update.connected_die_ids[i];
       const auto connected = die_id != 0;
+      // Redraw if connection status changed.
       die_updated[i] |= die_id != last_die_ids[i];
       last_die_ids[i] = die_id;
 
@@ -168,12 +198,6 @@ class DiceStatusMenu : public MenuBase {
               roll.second.state == pixels::RollState::ON_FACE) {
             die_roll_counts[i].AddRoll(roll.second.current_face);
             die_updated[i] = true;
-          }
-        }
-
-        for (const auto& battery : dice_update.battery_updates) {
-          if (battery.first == die_id) {
-            die_battery[i] = battery.second;
           }
         }
       }
@@ -254,6 +278,10 @@ class DiceStatusMenu : public MenuBase {
   std::array<RollCountWidget, MAX_NUM_DICE> die_roll_counts;
 };
 
+/**
+ * Some limited controls for setting the die effects on the current LED
+ * segment.
+ */
 class EffectMenu : public MenuBase {
  public:
   EffectMenu() = default;
@@ -261,6 +289,8 @@ class EffectMenu : public MenuBase {
   void Update(const DiceUpdate& dice_update) override {}
 
   void Draw(const DiceUpdate& dice_update, bool force_redraw) override {
+    // NOTE: This doesn't update automatically if the effect is updated on the
+    // web UI and vice-versa.
     if (force_redraw) {
       tft.fillScreen(TFT_BLACK);
       uint8_t mode = strip.getFirstSelectedSeg().mode;
@@ -287,6 +317,12 @@ class EffectMenu : public MenuBase {
     }
   }
 
+  /**
+   * Button 0 navigates up and down the settings for the effect.
+   * Button 1 changes the value for the selected settings.
+   * Long pressing a button resets the effect parameters to their defaults for
+   * the current die effect.
+   */
   void HandleButton(ButtonType type, uint8_t b) override {
     Segment& seg = strip.getFirstSelectedSeg();
     auto mode_itr =
@@ -323,31 +359,14 @@ class EffectMenu : public MenuBase {
   static constexpr size_t CHAR_WIDTH_SMALL = 21;
   size_t mode_idx = 0;
   size_t field_idx = 0;
-  DiceSettings* settings;
-
-  void SetDefaults() {
-    Segment& seg = strip.getFirstSelectedSeg();
-    switch (DIE_LED_MODES[mode_idx]) {
-      case FX_MODE_SIMPLE_D20:
-        seg.setColor(0, CYAN);
-        seg.setColor(1, 0);
-        break;
-      case FX_MODE_PULSE_D20:
-        seg.setPalette(50);
-        seg.setColor(0, RED);
-        break;
-      case FX_MODE_CHECK_D20:
-        seg.setPalette(0);
-        seg.setColor(0, RED);
-        seg.setColor(1, 0);
-        break;
-    }
-  }
 };
 
 constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODES;
 constexpr std::array<uint8_t, 3> EffectMenu::DIE_LED_MODE_NUM_FIELDS;
 
+/**
+ * Menu for setting the roll label and some info for that roll type.
+ */
 class InfoMenu : public MenuBase {
  public:
   InfoMenu() = default;
@@ -368,6 +387,10 @@ class InfoMenu : public MenuBase {
     }
   }
 
+  /**
+   * Single clicking navigates through the roll types. Button 0 goes down, and
+   * button 1 goes up with wrapping.
+   */
   void HandleButton(ButtonType type, uint8_t b) override {
     if (settings->roll_label >= NUM_ROLL_INFOS) {
       settings->roll_label = 0;
@@ -388,6 +411,9 @@ class InfoMenu : public MenuBase {
   };
 };
 
+/**
+ * Interface for the rest of the app to update the menus.
+ */
 class MenuController {
  public:
   MenuController(DiceSettings* settings) { MenuBase::settings = settings; }
@@ -400,7 +426,6 @@ class MenuController {
     tft.setCursor(0, 60);
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(2);
-    tft.print(" No Dice");
     EnableBacklight(true);
 
     force_redraw = true;
@@ -416,6 +441,10 @@ class MenuController {
   #endif
   }
 
+  /**
+   * Double clicking navigates between menus. Button 0 goes down, and button 1
+   * goes up with wrapping.
+   */
   void HandleButton(ButtonType type, uint8_t b) {
     force_redraw = true;
     // Switch menus with double click

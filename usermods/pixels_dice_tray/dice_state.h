@@ -1,3 +1,6 @@
+/**
+ * Structs for passing around usermod state
+ */
 #pragma once
 
 #include <pixels_dice_interface.h>  // https://github.com/axlan/arduino-pixels-dice
