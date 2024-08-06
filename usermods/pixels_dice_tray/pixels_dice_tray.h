@@ -4,6 +4,7 @@
 #include "wled.h"
 
 #include "dice_state.h"
+#include "led_effects.h"
 #include "tft_menu.h"
 
 // Set this parameter to rotate the display. 1-3 rotate by 90,180,270 degrees.
@@ -18,7 +19,7 @@
 
 // Time with no updates before screen turns off (-1 to disable)
 #ifndef USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS
-  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 2 * 60 * 1000
+  #define USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS 5 * 60 * 1000
 #endif
 
 // Duration of each search for BLE devices.
@@ -38,115 +39,20 @@
 #define WLED_DOUBLE_PRESS \
   350  // double press if another press within 350ms after a short press
 
-extern int getSignalQuality(int rssi);
-
-// Reuse FX display functions.
-extern uint16_t mode_breath();
-extern uint16_t mode_blends();
-extern uint16_t running(uint32_t color1, uint32_t color2, bool theatre = false);
-extern uint16_t mode_glitter();
-extern uint16_t mode_gravcenter();
-
-DiceState dice_state;
-
-// These are updated in the main loop, but accessed by the effect functions as
-// well. My understand is that both of these accesses should be running on the
-// same "thread/task" since WLED doesn't directly create additional threads. The
-// exception would be network callbacks and interrupts, but I don't beleive
-// these accesses are triggered by those. If synchronization was needed, I could
-// look at the example in `requestJSONBufferLock()`.
-static pixels::RollUpdates dice_effect_state;
-
-static uint16_t simple_roll() {
-  if (!dice_effect_state.empty()) {
-    // Only keep last state.
-    if (dice_effect_state.size() > 1) {
-      dice_effect_state[0] = dice_effect_state.back();
-      dice_effect_state.resize(1);
-    }
-
-    auto roll = dice_effect_state.end()->second;
-
-    if (roll.state != pixels::RollState::ON_FACE) {
-      SEGMENT.fill(0);
-    } else {
-      uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
-      for (int i = 0; i <= num_segments; i++) {
-        SEGMENT.setPixelColor(i, SEGCOLOR(0));
-      }
-    }
-  } else {
-    SEGMENT.fill(0);
-  }
-  return FRAMETIME;
-}
-static const char _data_FX_MODE_SIMPLE_DIE[] PROGMEM = "DieSimple@;!;;01";
-
-static uint16_t pulse_roll() {
-  if (!dice_effect_state.empty()) {
-    // Only keep last state.
-    if (dice_effect_state.size() > 1) {
-      dice_effect_state[0] = dice_effect_state.back();
-      dice_effect_state.resize(1);
-    }
-
-    auto roll = dice_effect_state.end()->second;
-
-    if (roll.state != pixels::RollState::ON_FACE) {
-      return mode_breath();
-    } else {
-      uint16_t ret = mode_blends();
-      uint16_t num_segments = float(roll.current_face + 1) / 20.0 * SEGLEN;
-      for (int i = num_segments; i < SEGLEN; i++) {
-        SEGMENT.setPixelColor(i, SEGCOLOR(1));
-      }
-      return ret;
-    }
-  } else {
-    return mode_breath();
-  }
-  return FRAMETIME;
-}
-static const char _data_FX_MODE_PULSE_DIE[] PROGMEM =
-    "DiePulse@!,!;!,!;!;01;sx=24,pal=50";
-
-static uint16_t check_roll() {
-  if (!dice_effect_state.empty()) {
-    // Only keep last state.
-    if (dice_effect_state.size() > 1) {
-      dice_effect_state[0] = dice_effect_state.back();
-      dice_effect_state.resize(1);
-    }
-
-    auto roll = dice_effect_state.end()->second;
-
-    if (roll.state != pixels::RollState::ON_FACE) {
-      return running(SEGCOLOR(0), SEGCOLOR(2));
-    } else {
-      if (roll.current_face + 1 >= dice_state.roll_target) {
-        return mode_glitter();
-      } else {
-        return mode_gravcenter();
-      }
-    }
-  } else {
-    return running(SEGCOLOR(0), SEGCOLOR(2));
-  }
-  return FRAMETIME;
-}
-static const char _data_FX_MODE_CHECK_DIE[] PROGMEM =
-    "DieCheck@!,!;1,2,3;!;01;pal=0,ix=128,m12=2,si=0";
-
 class PixelsDiceTrayUsermod : public Usermod {
  private:
   bool enabled = true;
 
+  DiceUpdate dice_update;
+
+  // Settings
+  uint32_t ble_scan_duration_sec = BLE_SCAN_DURATION_SEC;
+  unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
+  DiceSettings dice_settings;
+
 #if USING_TFT_DISPLAY
   MenuController menu_ctrl;
 #endif
-
-  // Settings
-  unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
 
   static void center(String& line, uint8_t width) {
     int len = line.length();
@@ -170,7 +76,25 @@ class PixelsDiceTrayUsermod : public Usermod {
 #endif
   }
 
+  void UpdateDieNames(
+      const std::array<const std::string, MAX_NUM_DICE>& new_die_names) {
+    for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+      // If the saved setting was a wildcard, and that connected to a die, use
+      // the new name instead of the wildcard. Saving this "locks" the name in.
+      bool overriden_wildcard =
+          new_die_names[i] == "*" && dice_update.connected_die_ids[i] != 0;
+      if (!overriden_wildcard &&
+          new_die_names[i] != dice_settings.configured_die_names[i]) {
+        dice_settings.configured_die_names[i] = new_die_names[i];
+        dice_update.connected_die_ids[i] = 0;
+        last_die_events[i] = pixels::RollEvent();
+      }
+    }
+  }
+
  public:
+  PixelsDiceTrayUsermod() : menu_ctrl(&dice_settings) {}
+
   // Functions called by WLED
 
   /*
@@ -214,7 +138,7 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     // Start a background task scanning for dice.
     // On completion the discovered dice are connected to.
-    pixels::ScanForDice(BLE_SCAN_DURATION_SEC, BLE_TIME_BETWEEN_SCANS_SEC);
+    pixels::ScanForDice(ble_scan_duration_sec, BLE_TIME_BETWEEN_SCANS_SEC);
 
 #if USING_TFT_DISPLAY
     menu_ctrl.Init(rotation);
@@ -254,19 +178,21 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
     last_loop_time = millis();
 
-    // Update dice_state.dice_list with the connected dice
-    pixels::ListDice(dice_state.dice_list);
+    // Update dice_list with the connected dice
+    pixels::ListDice(dice_update.dice_list);
     // Get all the roll/battery updates since the last loop
-    pixels::GetDieRollUpdates(dice_state.roll_updates);
-    pixels::GetDieBatteryUpdates(dice_state.battery_updates);
+    pixels::GetDieRollUpdates(dice_update.roll_updates);
+    pixels::GetDieBatteryUpdates(dice_update.battery_updates);
 
     // Go through list of connected die.
-    std::array<bool, DiceState::NUM_DICE> die_connected = {false, false};
-    for (auto die_id : dice_state.dice_list) {
-      // First check if we've already matched this ID to a connected die.
+    // TODO: Blacklist die that are connected to, but don't match the configured
+    //       names.
+    std::array<bool, MAX_NUM_DICE> die_connected = {false, false};
+    for (auto die_id : dice_update.dice_list) {
       bool matched = false;
-      for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
-        if (die_id == dice_state.connected_die_ids[i]) {
+      // First check if we've already matched this ID to a connected die.
+      for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+        if (die_id == dice_update.connected_die_ids[i]) {
           die_connected[i] = true;
           matched = true;
           break;
@@ -275,39 +201,60 @@ class PixelsDiceTrayUsermod : public Usermod {
 
       // If this isn't already matched, check if its name matches an expected name.
       if (!matched) {
-        auto description = pixels::GetDieDescription(die_id);
-        for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
-          if (0 == dice_state.connected_die_ids[i] &&
-              description.name == dice_state.configured_die_names[i]) {
-            dice_state.connected_die_ids[i] = die_id;
+        auto die_name = pixels::GetDieDescription(die_id).name;
+        for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+          if (0 == dice_update.connected_die_ids[i] &&
+              die_name == dice_settings.configured_die_names[i]) {
+            dice_update.connected_die_ids[i] = die_id;
             die_connected[i] = true;
+            matched = true;
+            DEBUG_PRINTF_P(PSTR("DiceTray: %u (%s) connected.\n"), i,
+                           die_name.c_str());
             break;
+          }
+        }
+
+        // If it doesn't match any expected names, check if there's any wildcards to match.
+        if (!matched) {
+          auto description = pixels::GetDieDescription(die_id);
+          for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+            if (dice_settings.configured_die_names[i] == "*") {
+              dice_update.connected_die_ids[i] = die_id;
+              die_connected[i] = true;
+              dice_settings.configured_die_names[i] = die_name;
+              DEBUG_PRINTF_P(PSTR("DiceTray: %u (%s) connected as wildcard.\n"),
+                             i, die_name.c_str());
+              break;
+            }
           }
         }
       }
     }
 
-    // Clear connected die that weren't still present.
+    // Clear connected die that aren't still present.
     bool all_found = true;
     bool none_found = true;
-    for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+    for (size_t i = 0; i < MAX_NUM_DICE; i++) {
       if (!die_connected[i]) {
-        dice_state.connected_die_ids[i] = 0;
-        dice_state.last_die_values[i] = DiceState::INVALID_ROLL;
-        all_found = false;
+        if (dice_update.connected_die_ids[i] != 0) {
+          dice_update.connected_die_ids[i] = 0;
+          last_die_events[i] = pixels::RollEvent();
+          DEBUG_PRINTF_P(PSTR("DiceTray: %u disconnected.\n"), i);
+        }
+
+        if (!dice_settings.configured_die_names[i].empty()) {
+          all_found = false;
+        }
       } else {
         none_found = false;
       }
     }
 
-    // Update dice_state.last_die_values
-    for (const auto& roll : dice_state.roll_updates) {
-      if (roll.second.state == pixels::RollState::ON_FACE) {
-        dice_state.last_die_value = roll.second.current_face;
-        for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
-          if (dice_state.connected_die_ids[i] == roll.first) {
-            dice_state.last_die_values[i] = dice_state.last_die_value;
-          }
+    // Update last_die_events
+    for (const auto& roll : dice_update.roll_updates) {
+      for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+        if (dice_update.connected_die_ids[i] == roll.first) {
+          last_die_events[i] = roll.second;
         }
       }
       if (WLED_MQTT_CONNECTED) {
@@ -323,6 +270,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
 
 #if USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS > 0 && USING_TFT_DISPLAY
+    // If at least one die is configured, but none are found
     if (none_found) {
       if (millis() - last_die_connected_time >
           USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS) {
@@ -341,17 +289,14 @@ class PixelsDiceTrayUsermod : public Usermod {
 #endif
 
     if (pixels::IsScanning() && all_found) {
+      DEBUG_PRINTF_P(PSTR("DiceTray: All dice found. Stopping search.\n"));
       pixels::StopScanning();
     } else if (!pixels::IsScanning() && !all_found) {
-      pixels::ScanForDice(BLE_SCAN_DURATION_SEC, BLE_TIME_BETWEEN_SCANS_SEC);
+      DEBUG_PRINTF_P(PSTR("DiceTray: Resuming dice search.\n"));
+      pixels::ScanForDice(ble_scan_duration_sec, BLE_TIME_BETWEEN_SCANS_SEC);
     }
-
-    // Add updates to the effect queue.
-    dice_effect_state.insert(dice_effect_state.end(),
-                             dice_state.roll_updates.begin(),
-                             dice_state.roll_updates.end());
 #if USING_TFT_DISPLAY
-    menu_ctrl.Update();
+    menu_ctrl.Update(dice_update);
 #endif
   }
 
@@ -409,6 +354,9 @@ class PixelsDiceTrayUsermod : public Usermod {
    */
   void addToConfig(JsonObject& root) override {
     JsonObject top = root.createNestedObject("DiceTray");
+    top["ble_scan_duration"] = ble_scan_duration_sec;
+    top["die_0"] = dice_settings.configured_die_names[0];
+    top["die_1"] = dice_settings.configured_die_names[1];
 #if USING_TFT_DISPLAY
     top["rotation"] = rotation;
     JsonArray pins = top.createNestedArray("pin");
@@ -419,23 +367,39 @@ class PixelsDiceTrayUsermod : public Usermod {
 #endif
   }
 
-#if USING_TFT_DISPLAY
   void appendConfigData() override {
-    oappend(SET_F("dd=addDropdown('TFT','rotation');"));
+    // Slightly annoying that you can't put text before an element.
+    // The an item on the usermod config page has the following HTML:
+    // ```html
+    // Die 0
+    // <input type="hidden" name="DiceTray:die_0" value="text">
+    // <input type="text" name="DiceTray:die_0" value="*" style="width:250px;" oninput="check(this,'DiceTray')">
+    // ```
+    // addInfo let's you add data before or after the two input fields.
+    //
+    // To work around this, add info text to the end of the preceding item.
+    //
+    // See addInfo in wled00/data/settings_um.htm for details on what this function does.
+    oappend(
+        SET_F("addInfo('DiceTray:ble_scan_duration',1,'<br><i>Set to \"*\" to "
+              "connect to any die.<br>Leave Blank to disable.</i>','');"));
+#if USING_TFT_DISPLAY
+    oappend(SET_F("dd=addDropdown('DiceTray','rotation');"));
     oappend(SET_F("addOption(dd,'0 deg',0);"));
     oappend(SET_F("addOption(dd,'90 deg',1);"));
     oappend(SET_F("addOption(dd,'180 deg',2);"));
     oappend(SET_F("addOption(dd,'270 deg',3);"));
-    oappend(
-        SET_F("addInfo('TFT:font_size',1,'<br><i class=\"warn\">DO NOT CHANGE "
-              "SPI PINS ABOVE OR BELOW.</i><br><i class=\"warn\">CHANGES ARE "
-              "IGNORED EXCEPT FOR CHECKING PIN CONFLICTS.</i>','');"));
+    oappend(SET_F(
+        "addInfo('DiceTray:rotation',1,'<br><i class=\"warn\">DO NOT CHANGE "
+        "SPI PINS ABOVE OR BELOW.</i><br><i class=\"warn\">CHANGES ARE "
+        "IGNORED EXCEPT FOR CHECKING PIN CONFLICTS.</i>','');"));
     oappend(SET_F("addInfo('TFT:pin[]',0,'','SPI CS');"));
     oappend(SET_F("addInfo('TFT:pin[]',1,'','SPI DC');"));
     oappend(SET_F("addInfo('TFT:pin[]',2,'','SPI RST');"));
     oappend(SET_F("addInfo('TFT:pin[]',3,'','SPI BL');"));
-  }
 #endif
+  }
+
   /*
    * readFromConfig() can be used to read back the custom settings you added
    * with addToConfig(). This is called by WLED when settings are loaded
@@ -455,6 +419,15 @@ class PixelsDiceTrayUsermod : public Usermod {
       DEBUG_PRINTLN(F("DiceTray: No config found. (Using defaults.)"));
       return false;
     }
+
+    if (top.containsKey("die_0") && top.containsKey("die_1")) {
+      const std::array<const std::string, MAX_NUM_DICE> new_die_names{
+          top["die_0"], top["die_1"]};
+      UpdateDieNames(new_die_names);
+    } else {
+      DEBUG_PRINTLN(F("No die names found."));
+    }
+
 #if USING_TFT_DISPLAY
     unsigned new_rotation = min(top["rotation"] | rotation, 3u);
 
@@ -463,7 +436,11 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     if (new_rotation != rotation) {
       rotation = new_rotation;
+      menu_ctrl.Init(rotation);
     }
+
+    // Update with any modified settings.
+    menu_ctrl.Redraw();
 #endif
 
     // use "return !top["newestParameter"].isNull();" when updating Usermod with

@@ -64,6 +64,30 @@ lib_deps = ${esp32s3.lib_deps}
   axlan/pixels-dice-interface @ 1.2.0
 
 # ------------------------------------------------------------------------------
+# ESP32S3 dev board with 8MB flash and no extended RAM.
+# ------------------------------------------------------------------------------
+[env:esp32s3dev_8MB]
+board = esp32-s3-devkitc-1 ;; generic dev board;
+platform = ${esp32s3.platform}
+upload_speed = 921600
+build_unflags = ${common.build_unflags}
+board_build.partitions = ${esp32.large_partitions}
+board_build.f_flash = 80000000L
+board_build.flash_mode = qio
+monitor_filters = esp32_exception_decoder
+build_flags = ${common.build_flags} ${esp32s3.build_flags} -D WLED_RELEASE_NAME=T-QT-PRO-8MB
+  -D CONFIG_LITTLEFS_FOR_IDF_3_2 -D WLED_WATCHDOG_TIMEOUT=0
+  -D ARDUINO_USB_CDC_ON_BOOT=1 -D ARDUINO_USB_MODE=1      ;; for boards with USB-OTG connector only (USBCDC or "TinyUSB")
+  
+  -D USERMOD_PIXELS_DICE_TRAY ;; Enables this UserMod
+
+  ;-D WLED_DEBUG
+lib_deps = ${esp32s3.lib_deps}
+  ${esp32.AR_lib_deps}
+  ESP32 BLE Arduino
+  axlan/pixels-dice-interface @ 1.2.0
+
+# ------------------------------------------------------------------------------
 # ESP32 dev board without screen
 # ------------------------------------------------------------------------------
 # THIS DOES NOT WORK!!!!!!

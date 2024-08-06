@@ -21,8 +21,6 @@ const uint8_t LIGHTNING_ICON_8X8[] PROGMEM = {
     0b10000001, 0b11110010, 0b00010100, 0b00011000,
 };
 
-extern DiceState dice_state;
-
 TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);  // Invoke custom library
 
 static void PrintLnInBox(const char* txt, uint32_t color) {
@@ -37,7 +35,7 @@ static void PrintLnInBox(const char* txt, uint32_t color) {
 }
 
 void SetDefaultColors(uint8_t mode) {
-  Segment& seg = strip.getMainSegment();
+  Segment& seg = strip.getFirstSelectedSeg();
   switch (mode) {
     case FX_MODE_SIMPLE_D20:
       seg.setColor(0, GREEN);
@@ -52,6 +50,14 @@ void SetDefaultColors(uint8_t mode) {
       seg.setColor(2, GREEN);
       break;
   }
+}
+
+/**
+ * Get the pointer to the custom2 value for the current LED segment. This is
+ * used to set the target roll for relevant effects.
+ */
+static uint8_t* GetCurrentRollTarget() {
+  return &strip.getFirstSelectedSeg().custom2;
 }
 
 class RollCountWidget {
@@ -119,12 +125,17 @@ enum class ButtonType { SINGLE, DOUBLE, LONG };
 
 class MenuBase {
  public:
-  virtual void Update() = 0;
+  virtual void Update(const DiceUpdate& dice_update) = 0;
 
-  virtual void Draw(bool force_redraw) = 0;
+  virtual void Draw(const DiceUpdate& dice_update, bool force_redraw) = 0;
 
   virtual void HandleButton(ButtonType type, uint8_t b) = 0;
+
+ protected:
+  static DiceSettings* settings;
+  friend class MenuController;
 };
+DiceSettings* MenuBase::settings = nullptr;
 
 class DiceStatusMenu : public MenuBase {
  public:
@@ -133,17 +144,16 @@ class DiceStatusMenu : public MenuBase {
                         RollCountWidget{0, SECTION_HEIGHT + 20, TFT_BLUE,
                                         TFT_GREEN, 6, 40}} {}
 
-  void Update() override {
-    for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
-      const auto die_id = dice_state.connected_die_ids[i];
+  void Update(const DiceUpdate& dice_update) override {
+    for (size_t i = 0; i < MAX_NUM_DICE; i++) {
+      const auto die_id = dice_update.connected_die_ids[i];
       const auto connected = die_id != 0;
-
-      die_updated[i] |= connected != die_connection_status[i];
-      die_connection_status[i] = connected;
+      die_updated[i] |= die_id != last_die_ids[i];
+      last_die_ids[i] = die_id;
 
       if (connected) {
         bool charging = false;
-        for (const auto& battery : dice_state.battery_updates) {
+        for (const auto& battery : dice_update.battery_updates) {
           if (battery.first == die_id) {
             if (die_battery[i].battery_level == INVALID_BATTERY ||
                 battery.second.is_charging != die_battery[i].is_charging) {
@@ -153,7 +163,7 @@ class DiceStatusMenu : public MenuBase {
           }
         }
 
-        for (const auto& roll : dice_state.roll_updates) {
+        for (const auto& roll : dice_update.roll_updates) {
           if (roll.first == die_id &&
               roll.second.state == pixels::RollState::ON_FACE) {
             die_roll_counts[i].AddRoll(roll.second.current_face);
@@ -161,7 +171,7 @@ class DiceStatusMenu : public MenuBase {
           }
         }
 
-        for (const auto& battery : dice_state.battery_updates) {
+        for (const auto& battery : dice_update.battery_updates) {
           if (battery.first == die_id) {
             die_battery[i] = battery.second;
           }
@@ -170,11 +180,11 @@ class DiceStatusMenu : public MenuBase {
     }
   }
 
-  void Draw(bool force_redraw) override {
+  void Draw(const DiceUpdate& dice_update, bool force_redraw) override {
     // This could probably be optimized for partial redraws.
-    for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+    for (size_t i = 0; i < MAX_NUM_DICE; i++) {
       const int16_t ys = SECTION_HEIGHT * i;
-      const auto die_id = dice_state.connected_die_ids[i];
+      const auto die_id = dice_update.connected_die_ids[i];
       const auto connected = die_id != 0;
       // Screen updates might be slow, yield in case network task needs to do
       // work.
@@ -185,18 +195,25 @@ class DiceStatusMenu : public MenuBase {
         last_update[i] = millis();
         tft.fillRect(0, ys, TFT_WIDTH, SECTION_HEIGHT, TFT_BLACK);
         tft.drawRect(0, ys, TFT_WIDTH, SECTION_HEIGHT, TFT_BLUE);
-        if (!connected) {
+        if (settings->configured_die_names[i].empty()) {
           tft.setTextColor(TFT_RED);
           tft.setCursor(2, ys + 4);
           tft.setTextSize(2);
-          tft.println(dice_state.configured_die_names[i].c_str());
+          tft.println("Connection");
+          tft.setCursor(2, tft.getCursorY());
+          tft.println("Disabled");
+        } else if (!connected) {
+          tft.setTextColor(TFT_RED);
+          tft.setCursor(2, ys + 4);
+          tft.setTextSize(2);
+          tft.println(settings->configured_die_names[i].c_str());
           tft.setCursor(2, tft.getCursorY());
           tft.print("Waiting...");
         } else {
           tft.setTextColor(TFT_WHITE);
           tft.setCursor(0, ys + 2);
           tft.setTextSize(1);
-          tft.println(dice_state.configured_die_names[i].c_str());
+          tft.println(settings->configured_die_names[i].c_str());
           tft.print("Cnt ");
           tft.print(die_roll_counts[i].GetNumRolls());
           if (die_battery[i].battery_level != INVALID_BATTERY) {
@@ -217,7 +234,7 @@ class DiceStatusMenu : public MenuBase {
 
   void HandleButton(ButtonType type, uint8_t b) override {
     if (type == ButtonType::LONG) {
-      for (size_t i = 0; i < DiceState::NUM_DICE; i++) {
+      for (size_t i = 0; i < MAX_NUM_DICE; i++) {
         die_roll_counts[i].Clear();
         die_updated[i] = true;
       }
@@ -226,27 +243,27 @@ class DiceStatusMenu : public MenuBase {
 
  private:
   static constexpr long BATTERY_REFRESH_RATE_MS = 60 * 1000;
-  static constexpr int16_t SECTION_HEIGHT = TFT_HEIGHT / DiceState::NUM_DICE;
+  static constexpr int16_t SECTION_HEIGHT = TFT_HEIGHT / MAX_NUM_DICE;
   static constexpr uint8_t INVALID_BATTERY = 0xFF;
-  std::array<long, DiceState::NUM_DICE> last_update = {0};
-  std::array<bool, DiceState::NUM_DICE> die_connection_status = {false};
-  std::array<bool, DiceState::NUM_DICE> die_updated = {false};
-  std::array<pixels::BatteryEvent, DiceState::NUM_DICE> die_battery = {
+  std::array<long, MAX_NUM_DICE> last_update{0, 0};
+  std::array<pixels::PixelsDieID, MAX_NUM_DICE> last_die_ids{0, 0};
+  std::array<bool, MAX_NUM_DICE> die_updated{false, false};
+  std::array<pixels::BatteryEvent, MAX_NUM_DICE> die_battery = {
       pixels::BatteryEvent{INVALID_BATTERY, false},
       pixels::BatteryEvent{INVALID_BATTERY, false}};
-  std::array<RollCountWidget, DiceState::NUM_DICE> die_roll_counts;
+  std::array<RollCountWidget, MAX_NUM_DICE> die_roll_counts;
 };
 
 class EffectMenu : public MenuBase {
  public:
   EffectMenu() = default;
 
-  void Update() override {}
+  void Update(const DiceUpdate& dice_update) override {}
 
-  void Draw(bool force_redraw) override {
+  void Draw(const DiceUpdate& dice_update, bool force_redraw) override {
     if (force_redraw) {
       tft.fillScreen(TFT_BLACK);
-      uint8_t mode = strip.getMainSegment().mode;
+      uint8_t mode = strip.getFirstSelectedSeg().mode;
       if (Contains(DIE_LED_MODES, mode)) {
         char lineBuffer[CHAR_WIDTH_BIG + 1];
         extractModeName(mode, JSON_mode_names, lineBuffer, CHAR_WIDTH_BIG);
@@ -256,7 +273,7 @@ class EffectMenu : public MenuBase {
         PrintLnInBox(lineBuffer, (field_idx == 0) ? TFT_BLUE : TFT_BLACK);
         if (mode == FX_MODE_CHECK_D20) {
           snprintf(lineBuffer, sizeof(lineBuffer), "PASS: %u",
-                   dice_state.roll_target);
+                   *GetCurrentRollTarget());
           PrintLnInBox(lineBuffer, (field_idx == 1) ? TFT_BLUE : TFT_BLACK);
         }
       } else {
@@ -271,7 +288,7 @@ class EffectMenu : public MenuBase {
   }
 
   void HandleButton(ButtonType type, uint8_t b) override {
-    Segment& seg = strip.getMainSegment();
+    Segment& seg = strip.getFirstSelectedSeg();
     auto mode_itr =
         std::find(DIE_LED_MODES.begin(), DIE_LED_MODES.end(), seg.mode);
     if (mode_itr != DIE_LED_MODES.end()) {
@@ -292,7 +309,7 @@ class EffectMenu : public MenuBase {
           seg.setMode(DIE_LED_MODES[mode_idx]);
         } else if (DIE_LED_MODES[mode_idx] == FX_MODE_CHECK_D20 &&
                    field_idx == 1) {
-          dice_state.roll_target = dice_state.last_die_value + 1;
+          *GetCurrentRollTarget() = GetLastRoll().current_face;
         }
       }
     }
@@ -306,9 +323,10 @@ class EffectMenu : public MenuBase {
   static constexpr size_t CHAR_WIDTH_SMALL = 21;
   size_t mode_idx = 0;
   size_t field_idx = 0;
+  DiceSettings* settings;
 
   void SetDefaults() {
-    Segment& seg = strip.getMainSegment();
+    Segment& seg = strip.getFirstSelectedSeg();
     switch (DIE_LED_MODES[mode_idx]) {
       case FX_MODE_SIMPLE_D20:
         seg.setColor(0, CYAN);
@@ -334,13 +352,13 @@ class InfoMenu : public MenuBase {
  public:
   InfoMenu() = default;
 
-  void Update() override {}
+  void Update(const DiceUpdate& dice_update) override {}
 
-  void Draw(bool force_redraw) override {
+  void Draw(const DiceUpdate& dice_update, bool force_redraw) override {
     if (force_redraw) {
       tft.fillScreen(TFT_BLACK);
-      if (dice_state.roll_label != DiceState::INVALID_ROLL) {
-        PrintRollInfo(dice_state.roll_label);
+      if (settings->roll_label != INVALID_ROLL_VALUE) {
+        PrintRollInfo(settings->roll_label);
       } else {
         tft.setTextColor(TFT_RED);
         tft.setCursor(0, 60);
@@ -351,27 +369,29 @@ class InfoMenu : public MenuBase {
   }
 
   void HandleButton(ButtonType type, uint8_t b) override {
-    if (dice_state.roll_label >= NUM_ROLL_INFOS) {
-      dice_state.roll_label = 0;
+    if (settings->roll_label >= NUM_ROLL_INFOS) {
+      settings->roll_label = 0;
     } else if (b == 0) {
-      dice_state.roll_label = (dice_state.roll_label == 0)
-                                  ? NUM_ROLL_INFOS - 1
-                                  : dice_state.roll_label - 1;
+      settings->roll_label = (settings->roll_label == 0)
+                                 ? NUM_ROLL_INFOS - 1
+                                 : settings->roll_label - 1;
     } else if (b == 1) {
-      dice_state.roll_label = (dice_state.roll_label + 1) % NUM_ROLL_INFOS;
+      settings->roll_label = (settings->roll_label + 1) % NUM_ROLL_INFOS;
     }
     if (WLED_MQTT_CONNECTED) {
       char mqtt_topic_buffer[MQTT_MAX_TOPIC_LEN + 16];
       snprintf(mqtt_topic_buffer, sizeof(mqtt_topic_buffer), PSTR("%s/%s"),
-               mqttDeviceTopic, "dice/dice_state.roll_label");
+               mqttDeviceTopic, "dice/settings->roll_label");
       mqtt->publish(mqtt_topic_buffer, 0, false,
-                    GetRollName(dice_state.roll_label));
+                    GetRollName(settings->roll_label));
     }
   };
 };
 
 class MenuController {
  public:
+  MenuController(DiceSettings* settings) { MenuBase::settings = settings; }
+
   void Init(unsigned rotation) {
     tft.init();
     tft.setRotation(rotation);
@@ -381,8 +401,9 @@ class MenuController {
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(2);
     tft.print(" No Dice");
-
     EnableBacklight(true);
+
+    force_redraw = true;
   }
 
   // Set the pin to turn the backlight on or off if available.
@@ -410,13 +431,15 @@ class MenuController {
     }
   }
 
-  void Update() {
+  void Update(const DiceUpdate& dice_update) {
     for (auto menu_ptr : menu_ptrs) {
-      menu_ptr->Update();
+      menu_ptr->Update(dice_update);
     }
-    menu_ptrs[current_index]->Draw(force_redraw);
+    menu_ptrs[current_index]->Draw(dice_update, force_redraw);
     force_redraw = false;
   }
+
+  void Redraw() { force_redraw = true; }
 
  private:
   size_t current_index = 0;
