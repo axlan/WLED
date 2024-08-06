@@ -93,7 +93,12 @@ class PixelsDiceTrayUsermod : public Usermod {
   }
 
  public:
-  PixelsDiceTrayUsermod() : menu_ctrl(&dice_settings) {}
+  PixelsDiceTrayUsermod()
+#if USING_TFT_DISPLAY
+      : menu_ctrl(&dice_settings)
+#endif
+  {
+  }
 
   // Functions called by WLED
 
@@ -382,10 +387,10 @@ class PixelsDiceTrayUsermod : public Usermod {
     // To work around this, add info text to the end of the preceding item.
     //
     // See addInfo in wled00/data/settings_um.htm for details on what this function does.
-    oappend(
-        SET_F("addInfo('DiceTray:ble_scan_duration',1,'<br><br><i>Set to \"*\" to "
-              "connect to any die.<br>Leave Blank to disable.</i><br><i "
-              "class=\"warn\">Saving will replace \"*\" with die names.</i>','');"));
+    oappend(SET_F(
+        "addInfo('DiceTray:ble_scan_duration',1,'<br><br><i>Set to \"*\" to "
+        "connect to any die.<br>Leave Blank to disable.</i><br><i "
+        "class=\"warn\">Saving will replace \"*\" with die names.</i>','');"));
 #if USING_TFT_DISPLAY
     oappend(SET_F("ddr=addDropdown('DiceTray','rotation');"));
     oappend(SET_F("addOption(ddr,'0 deg',0);"));
