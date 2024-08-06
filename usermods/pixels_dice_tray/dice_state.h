@@ -35,8 +35,9 @@ struct DiceUpdate {
 struct DiceSettings {
   // The mapping of dice names, to the index of die used for effects (ie. The
   // die named "Cat" is die 0). BLE discovery will stop when all the dice are
-  // found. The die slot is disabled if the name is empty.
-  std::array<std::string, MAX_NUM_DICE> configured_die_names;
+  // found. The die slot is disabled if the name is empty. If the name is "*",
+  // the slot will use the first unassociated die it sees.
+  std::array<std::string, MAX_NUM_DICE> configured_die_names{"*", "*"};
   // A label set to describe the next die roll. Index into GetRollName().
   uint8_t roll_label = INVALID_ROLL_VALUE;
 };
@@ -44,7 +45,7 @@ struct DiceSettings {
 // These are updated in the main loop, but accessed by the effect functions as
 // well. My understand is that both of these accesses should be running on the
 // same "thread/task" since WLED doesn't directly create additional threads. The
-// exception would be network callbacks and interrupts, but I don't beleive
+// exception would be network callbacks and interrupts, but I don't believe
 // these accesses are triggered by those. If synchronization was needed, I could
 // look at the example in `requestJSONBufferLock()`.
 std::array<pixels::RollEvent, MAX_NUM_DICE> last_die_events;

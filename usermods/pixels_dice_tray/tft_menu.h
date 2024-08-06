@@ -53,6 +53,7 @@ void SetDefaultColors(uint8_t mode) {
   switch (mode) {
     case FX_MODE_SIMPLE_D20:
       seg.setColor(0, GREEN);
+      seg.setColor(1, 0);
       break;
     case FX_MODE_PULSE_D20:
       seg.setColor(0, GREEN);
@@ -345,7 +346,7 @@ class EffectMenu : public MenuBase {
           seg.setMode(DIE_LED_MODES[mode_idx]);
         } else if (DIE_LED_MODES[mode_idx] == FX_MODE_CHECK_D20 &&
                    field_idx == 1) {
-          *GetCurrentRollTarget() = GetLastRoll().current_face;
+          *GetCurrentRollTarget() = GetLastRoll().current_face + 1;
         }
       }
     }

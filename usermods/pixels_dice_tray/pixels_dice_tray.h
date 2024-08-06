@@ -274,10 +274,12 @@ class PixelsDiceTrayUsermod : public Usermod {
     if (none_found) {
       if (millis() - last_die_connected_time >
           USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS) {
-        // Turn off backlight and go to sleep.
+        // Turn off LEDs and backlight and go to sleep.
         // Since none of the wake up pins are wired up, expect to sleep
         // until power cycle or reset, so don't need to handle normal
         // wakeup.
+        bri = 0;
+        applyFinalBri();
         menu_ctrl.EnableBacklight(false);
         gpio_hold_en((gpio_num_t)TFT_BL);
         gpio_deep_sleep_hold_en();
@@ -381,18 +383,18 @@ class PixelsDiceTrayUsermod : public Usermod {
     //
     // See addInfo in wled00/data/settings_um.htm for details on what this function does.
     oappend(
-        SET_F("addInfo('DiceTray:ble_scan_duration',1,'<br><i>Set to \"*\" to "
-              "connect to any die.<br>Leave Blank to disable.</i>','');"));
+        SET_F("addInfo('DiceTray:ble_scan_duration',1,'<br><br><i>Set to \"*\" to "
+              "connect to any die.<br>Leave Blank to disable.</i><br><i "
+              "class=\"warn\">Saving will replace \"*\" with die names.</i>','');"));
 #if USING_TFT_DISPLAY
-    oappend(SET_F("dd=addDropdown('DiceTray','rotation');"));
-    oappend(SET_F("addOption(dd,'0 deg',0);"));
-    oappend(SET_F("addOption(dd,'90 deg',1);"));
-    oappend(SET_F("addOption(dd,'180 deg',2);"));
-    oappend(SET_F("addOption(dd,'270 deg',3);"));
+    oappend(SET_F("ddr=addDropdown('DiceTray','rotation');"));
+    oappend(SET_F("addOption(ddr,'0 deg',0);"));
+    oappend(SET_F("addOption(ddr,'90 deg',1);"));
+    oappend(SET_F("addOption(ddr,'180 deg',2);"));
+    oappend(SET_F("addOption(ddr,'270 deg',3);"));
     oappend(SET_F(
         "addInfo('DiceTray:rotation',1,'<br><i class=\"warn\">DO NOT CHANGE "
-        "SPI PINS ABOVE OR BELOW.</i><br><i class=\"warn\">CHANGES ARE "
-        "IGNORED EXCEPT FOR CHECKING PIN CONFLICTS.</i>','');"));
+        "SPI PINS.</i><br><i class=\"warn\">CHANGES ARE IGNORED.</i>','');"));
     oappend(SET_F("addInfo('TFT:pin[]',0,'','SPI CS');"));
     oappend(SET_F("addInfo('TFT:pin[]',1,'','SPI DC');"));
     oappend(SET_F("addInfo('TFT:pin[]',2,'','SPI RST');"));

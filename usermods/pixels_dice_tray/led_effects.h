@@ -45,6 +45,9 @@ static uint16_t simple_roll() {
     for (int i = 0; i <= num_segments; i++) {
       SEGMENT.setPixelColor(i, SEGCOLOR(0));
     }
+    for (int i = num_segments; i < SEGLEN; i++) {
+      SEGMENT.setPixelColor(i, SEGCOLOR(1));
+    }
   }
   return FRAMETIME;
 }
@@ -57,7 +60,7 @@ static uint16_t simple_roll() {
 // Flags - Effect is optimized for use on 1D LED strips.
 // Defaults - Selected Die set to 0xFF (USER_ANY_DIE)
 static const char _data_FX_MODE_SIMPLE_DIE[] PROGMEM =
-    "DieSimple@,,Selected Die;!;;1,c1=255";
+    "DieSimple@,,Selected Die;!,!;;1;c1=255";
 
 static uint16_t pulse_roll() {
   auto roll = GetLastRollForSegment();
