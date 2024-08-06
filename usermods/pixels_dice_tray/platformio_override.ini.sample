@@ -1,5 +1,5 @@
 [platformio]
-default_envs = t_qt_pro_8MB, esp32s3dev_8MB
+default_envs = t_qt_pro_8MB, esp32s3dev_8MB_qspi
 
 # ------------------------------------------------------------------------------
 # T-QT Pro 8MB with integrated 128x128 TFT screen
@@ -66,7 +66,7 @@ lib_deps = ${esp32s3.lib_deps}
 # ------------------------------------------------------------------------------
 # ESP32S3 dev board with 8MB flash and no extended RAM.
 # ------------------------------------------------------------------------------
-[env:esp32s3dev_8MB]
+[env:esp32s3dev_8MB_qspi]
 board = esp32-s3-devkitc-1 ;; generic dev board;
 platform = ${esp32s3.platform}
 upload_speed = 921600
