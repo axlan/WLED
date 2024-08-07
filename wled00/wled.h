@@ -926,5 +926,10 @@ public:
   void enableWatchdog();
   void disableWatchdog();
   #endif
+  void disableWiFi();
+  void enableWiFi();
+
+ private:
+  bool wifiDisabled = false;
 };
 #endif        // WLED_H

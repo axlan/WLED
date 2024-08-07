@@ -798,6 +798,8 @@ void WLED::initConnection()
   }
 #endif
 
+  if (wifiDisabled) return; // can still use ethernet
+
   WiFi.disconnect(true); // close old connections
 #ifdef ESP8266
   WiFi.setPhyMode(force802_3g ? WIFI_PHY_MODE_11G : WIFI_PHY_MODE_11N);
@@ -931,6 +933,9 @@ void WLED::handleConnection()
   static byte stacO = 0;
   unsigned long now = millis();
   const bool wifiConfigured = WLED_WIFI_CONFIGURED;
+
+  if (wifiDisabled)
+    return;
 
   // ignore connection handling if WiFi is configured and scan still running
   // or within first 2s if WiFi is not configured or AP is always active
@@ -1081,3 +1086,12 @@ void WLED::handleStatusLED()
   }
 }
 #endif
+
+void WLED::disableWiFi() {
+  wifiDisabled = true;
+  WiFi.disconnect(true);
+}
+
+void WLED::enableWiFi() {
+  wifiDisabled = false;
+}

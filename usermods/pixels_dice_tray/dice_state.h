@@ -29,15 +29,19 @@ struct DiceUpdate {
   pixels::BatteryUpdates battery_updates;
   // The PixelsDieID for each dice index. 0 if the die isn't connected.
   // The ordering here matches configured_die_names.
-  std::array<pixels::PixelsDieID, MAX_NUM_DICE> connected_die_ids{0, 0};
+  std::array<pixels::PixelsDieID, MAX_NUM_DICE> connected_die_ids{{0, 0}};
 };
 
 struct DiceSettings {
-  // The mapping of dice names, to the index of die used for effects (ie. The
-  // die named "Cat" is die 0). BLE discovery will stop when all the dice are
-  // found. The die slot is disabled if the name is empty. If the name is "*",
-  // the slot will use the first unassociated die it sees.
-  std::array<std::string, MAX_NUM_DICE> configured_die_names{"*", "*"};
+// The mapping of dice names, to the index of die used for effects (ie. The
+// die named "Cat" is die 0). BLE discovery will stop when all the dice are
+// found. The die slot is disabled if the name is empty. If the name is "*",
+// the slot will use the first unassociated die it sees.
+#if USERMOD_PIXELS_DICE_TRAY_WIFI_BLE_SWITCH
+  std::array<std::string, MAX_NUM_DICE> configured_die_names{{"*", ""}};
+#else
+  std::array<std::string, MAX_NUM_DICE> configured_die_names{{"*", "*"}};
+#endif
   // A label set to describe the next die roll. Index into GetRollName().
   uint8_t roll_label = INVALID_ROLL_VALUE;
 };

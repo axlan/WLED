@@ -49,6 +49,7 @@ class PixelsDiceTrayUsermod : public Usermod {
   uint32_t ble_scan_duration_sec = BLE_SCAN_DURATION_SEC;
   unsigned rotation = USERMOD_PIXELS_DICE_TRAY_ROTATION;
   DiceSettings dice_settings;
+  long wifi_enable_time_ms = 0;
 
 #if USING_TFT_DISPLAY
   MenuController menu_ctrl;
@@ -92,6 +93,22 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
   }
 
+  void EnableDiceBLESearch(bool enable) {
+    if (enable) {
+#if USERMOD_PIXELS_DICE_TRAY_WIFI_BLE_SWITCH
+      DEBUG_PRINTF_P(PSTR("DiceTray: Wifi disabled\n"));
+      WLED::instance().disableWiFi();
+      wifi_enable_time_ms = 0;
+#endif
+      pixels::ScanForDice(ble_scan_duration_sec, BLE_TIME_BETWEEN_SCANS_SEC);
+    } else {
+      pixels::StopScanning();
+#if USERMOD_PIXELS_DICE_TRAY_WIFI_BLE_SWITCH
+      wifi_enable_time_ms = millis() + ble_scan_duration_sec * 1000;
+#endif
+    }
+  }
+
  public:
   PixelsDiceTrayUsermod()
 #if USING_TFT_DISPLAY
@@ -110,7 +127,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     Serial.begin(115200);
 
 #if USING_TFT_DISPLAY
-    DEBUG_PRINTLN(F("Usermod TFT Display init"));
+    DEBUG_PRINTF_P(PSTR("DiceTray: init\n"));
     SetSPIPinsFromMacros();
     PinManagerPinType spiPins[] = {
         {spi_mosi, true}, {spi_miso, false}, {spi_sclk, true}};
@@ -128,7 +145,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
 
     if (!enabled) {
-      DEBUG_PRINTLN(F("Usermod TFT Display pin allocations failed."));
+      DEBUG_PRINTF_P(PSTR("DiceTray: TFT Display pin allocations failed.\n"));
       return;
     }
 #endif
@@ -143,7 +160,7 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     // Start a background task scanning for dice.
     // On completion the discovered dice are connected to.
-    pixels::ScanForDice(ble_scan_duration_sec, BLE_TIME_BETWEEN_SCANS_SEC);
+    EnableDiceBLESearch(true);
 
 #if USING_TFT_DISPLAY
     menu_ctrl.Init(rotation);
@@ -172,10 +189,16 @@ class PixelsDiceTrayUsermod : public Usermod {
    */
   void loop() override {
     static long last_loop_time = 0;
-    static long last_die_connected_time = millis();
 
     char mqtt_topic_buffer[MQTT_MAX_TOPIC_LEN + 16];
     char mqtt_data_buffer[128];
+
+#if USERMOD_PIXELS_DICE_TRAY_WIFI_BLE_SWITCH
+    if (wifi_enable_time_ms > 0 && millis() > wifi_enable_time_ms) {
+      WLED::instance().enableWiFi();
+      wifi_enable_time_ms = 0;
+    }
+#endif
 
     // Check if we time interval for redrawing passes.
     if (millis() - last_loop_time < USERMOD_PIXELS_DICE_TRAY_REFRESH_RATE_MS) {
@@ -267,7 +290,7 @@ class PixelsDiceTrayUsermod : public Usermod {
                  mqttDeviceTopic, "dice/roll");
         const char* name = pixels::GetDieDescription(roll.first).name.c_str();
         snprintf(mqtt_data_buffer, sizeof(mqtt_data_buffer),
-                 "{\"name\":\"%s\",\"state\":%d,\"val\":%d,\"time\":%d}", name,
+                 "{\"name\":\"%s\",\"state\":%d,\"val\":%d,\"time\":%lu}", name,
                  int(roll.second.state), roll.second.current_face + 1,
                  roll.second.timestamp);
         mqtt->publish(mqtt_topic_buffer, 0, false, mqtt_data_buffer);
@@ -275,6 +298,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
 
 #if USERMOD_PIXELS_DICE_TRAY_TIMEOUT_MS > 0 && USING_TFT_DISPLAY
+    static long last_die_connected_time = millis();
     // If at least one die is configured, but none are found
     if (none_found) {
       if (millis() - last_die_connected_time >
@@ -297,10 +321,10 @@ class PixelsDiceTrayUsermod : public Usermod {
 
     if (pixels::IsScanning() && all_found) {
       DEBUG_PRINTF_P(PSTR("DiceTray: All dice found. Stopping search.\n"));
-      pixels::StopScanning();
+      EnableDiceBLESearch(false);
     } else if (!pixels::IsScanning() && !all_found) {
       DEBUG_PRINTF_P(PSTR("DiceTray: Resuming dice search.\n"));
-      pixels::ScanForDice(ble_scan_duration_sec, BLE_TIME_BETWEEN_SCANS_SEC);
+      EnableDiceBLESearch(true);
     }
 #if USING_TFT_DISPLAY
     menu_ctrl.Update(dice_update);
@@ -423,7 +447,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     // {"DiceTray":{"rotation":0,"font_size":1}}
     JsonObject top = root["DiceTray"];
     if (top.isNull()) {
-      DEBUG_PRINTLN(F("DiceTray: No config found. (Using defaults.)"));
+      DEBUG_PRINTF_P(PSTR("DiceTray: No config found. (Using defaults.)\n"));
       return false;
     }
 
@@ -432,7 +456,7 @@ class PixelsDiceTrayUsermod : public Usermod {
           top["die_0"], top["die_1"]};
       UpdateDieNames(new_die_names);
     } else {
-      DEBUG_PRINTLN(F("No die names found."));
+      DEBUG_PRINTF_P(PSTR("DiceTray: No die names found.\n"));
     }
 
 #if USING_TFT_DISPLAY

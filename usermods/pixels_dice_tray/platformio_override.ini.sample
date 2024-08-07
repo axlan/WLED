@@ -107,6 +107,8 @@ lib_deps = ${esp32s3.lib_deps}
 build_flags = ${common.build_flags} ${esp32.build_flags} -D WLED_RELEASE_NAME=ESP32
   ; Enable Pixels dice mod
   -D USERMOD_PIXELS_DICE_TRAY
+  -D USERMOD_PIXELS_DICE_TRAY_WIFI_BLE_SWITCH=1
+  ;-D WLED_DEBUG
 lib_deps = ${esp32.lib_deps}
   ESP32 BLE Arduino
   axlan/pixels-dice-interface @ 1.2.0
