@@ -107,10 +107,8 @@ class PixelsDiceTrayUsermod : public Usermod {
    * You can use it to initialize variables, sensors or similar.
    */
   void setup() override {
-    Serial.begin(115200);
-
+    DEBUG_PRINTLN(F("DiceTray: init"));
 #if USING_TFT_DISPLAY
-    DEBUG_PRINTLN(F("Usermod TFT Display init"));
     SetSPIPinsFromMacros();
     PinManagerPinType spiPins[] = {
         {spi_mosi, true}, {spi_miso, false}, {spi_sclk, true}};
@@ -128,7 +126,7 @@ class PixelsDiceTrayUsermod : public Usermod {
     }
 
     if (!enabled) {
-      DEBUG_PRINTLN(F("Usermod TFT Display pin allocations failed."));
+      DEBUG_PRINTLN(F("DiceTray: TFT Display pin allocations failed."));
       return;
     }
 #endif
@@ -432,7 +430,7 @@ class PixelsDiceTrayUsermod : public Usermod {
           top["die_0"], top["die_1"]};
       UpdateDieNames(new_die_names);
     } else {
-      DEBUG_PRINTLN(F("No die names found."));
+      DEBUG_PRINTLN(F("DiceTray: No die names found."));
     }
 
 #if USING_TFT_DISPLAY

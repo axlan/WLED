@@ -55,7 +55,7 @@ static uint16_t simple_roll() {
 // Name - DieSimple
 // Parameters -
 //   * Selected Die (custom1)
-// Colors - Uses color1
+// Colors - Uses color1 and color2
 // Palette - Not used
 // Flags - Effect is optimized for use on 1D LED strips.
 // Defaults - Selected Die set to 0xFF (USER_ANY_DIE)
