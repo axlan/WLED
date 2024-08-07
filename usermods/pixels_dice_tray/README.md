@@ -13,7 +13,9 @@ High level features:
   * Can display custom info for different roll types (ie. RPG stats/spell info)
 * Publish MQTT events from die rolls
   * Also report the selected roll type
-* Control settings through the WLED web 
+* Control settings through the WLED web
+
+See <https://www.robopenguins.com/pixels-dice-box/> for a write up of the design process of the hardware and software I used this with.
 
 ## Table of Contents
 
